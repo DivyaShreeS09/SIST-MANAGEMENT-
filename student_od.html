@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OD Request - Student</title>
+  <link rel="stylesheet" href="css/theme.css"/>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <img src="assets/logo.png" alt="SIST Logo">
+      <div>
+        <div class="brand-title">SIST MANAGEMENT SYSTEM</div>
+        <div class="brand-sub">OD Request</div>
+      </div>
+    </div>
+    <div class="right">
+      <button class="btn btn-ghost btn-mini" data-theme-toggle>Dark mode</button>
+      <span class="chip">Logged in: <span data-who>-</span></span>
+      <button class="btn btn-primary btn-mini" onclick="location.href='student_dashboard.html'">Dashboard</button>
+      <button class="btn btn-primary btn-mini" data-signout>Sign Out</button>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <div class="card">
+    <div class="card-inner">
+      <div class="section-title">OD Request</div>
+
+      <div class="grid2">
+        <div>
+          <label>Register No (auto)</label>
+          <input id="regNo" disabled>
+        </div>
+        <div>
+          <label>Name (auto)</label>
+          <input id="name" disabled>
+        </div>
+      </div>
+
+      <div class="grid2" style="margin-top:12px;">
+        <div>
+          <label>Program (auto)</label>
+          <input id="program" disabled>
+        </div>
+        <div>
+          <label>Section (auto)</label>
+          <input id="section" disabled>
+        </div>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <label>Reason / Subject</label>
+      <textarea id="reason" placeholder="e.g., Workshop / Technical Event / Hackathon (mandatory)"></textarea>
+
+      <div style="height:12px"></div>
+
+      <div class="grid2">
+        <div>
+          <label>From Date</label>
+          <input id="fromDate" type="date">
+        </div>
+        <div>
+          <label>To Date</label>
+          <input id="toDate" type="date">
+        </div>
+      </div>
+
+      <div class="grid2" style="margin-top:12px;">
+        <div>
+          <label>From Time</label>
+          <input id="fromTime" type="time">
+        </div>
+        <div>
+          <label>To Time</label>
+          <input id="toTime" type="time">
+        </div>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <label>Upload Proof (Letter / Invite / Approval)</label>
+      <input id="proof" type="file" accept=".pdf,.jpg,.jpeg,.png">
+
+      <div style="height:14px"></div>
+      <button class="btn btn-primary" style="width:100%" id="submitBtn">Submit OD Request</button>
+
+      <div style="height:18px"></div>
+
+      <div class="card">
+        <div class="card-inner">
+          <div class="card-title">Your OD History</div>
+          <div style="height:10px"></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Reason</th>
+                  <th>From-To</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/common.js"></script>
+<script src="js/app.js"></script>
+<script>
+  initThemeToggle();
+  const sess = requireAuth(["STUDENT"]);
+  headerBind();
+
+  document.getElementById("regNo").value = sess.username;
+  document.getElementById("name").value = sess.name;
+  document.getElementById("program").value = sess.program;
+  document.getElementById("section").value = sess.section;
+
+  function render(){
+    const list = Store.od().filter(r=>r.studentId===sess.id);
+    document.getElementById("rows").innerHTML = list.map(r=>`
+      <tr>
+        <td><b>${r.reason}</b></td>
+        <td>${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}</td>
+        <td>${statusPill(r.finalStatus)}</td>
+      </tr>
+    `).join("") || `<tr><td colspan="3" style="color:var(--muted);font-weight:900;">No OD requests yet.</td></tr>`;
+  }
+  render();
+
+  document.getElementById("submitBtn").addEventListener("click", ()=>{
+    const reason = document.getElementById("reason").value.trim();
+    const fromDate = document.getElementById("fromDate").value;
+    const toDate = document.getElementById("toDate").value;
+    const fromTime = document.getElementById("fromTime").value;
+    const toTime = document.getElementById("toTime").value;
+    const proof = document.getElementById("proof").files[0];
+
+    if(!reason || !fromDate || !toDate || !fromTime || !toTime){
+      toast("Fill all mandatory fields");
+      return;
+    }
+
+    window.createOD(sess, {
+      reason, fromDate, toDate, fromTime, toTime,
+      proofName: proof ? proof.name : ""
+    });
+
+    toast("OD request submitted");
+    document.getElementById("reason").value = "";
+    document.getElementById("proof").value = "";
+    render();
+  });
+</script>
+</body>
+</html>

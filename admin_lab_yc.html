@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Lab - Faculty/CC</title>
+  <link rel="stylesheet" href="css/theme.css"/>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <img src="assets/logo.png" alt="SIST Logo">
+      <div>
+        <div class="brand-title">SIST MANAGEMENT SYSTEM</div>
+        <div class="brand-sub">Lab Approval - Faculty/Incharge</div>
+      </div>
+    </div>
+    <div class="right">
+      <button class="btn btn-ghost btn-mini" data-theme-toggle>Dark mode</button>
+      <span class="chip"><span data-role>-</span> | <span data-who>-</span></span>
+      <button class="btn btn-primary btn-mini" data-signout>Sign Out</button>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <div class="card">
+    <div class="card-inner">
+      <div class="section-title">Lab Access Approval Dashboard</div>
+
+      <div class="grid3">
+        <div>
+          <label>Filter by Program</label>
+          <input id="fProgram" placeholder="e.g., B.E CSE AIML">
+        </div>
+        <div>
+          <label>Filter by Section</label>
+          <input id="fSection" placeholder="e.g., A1 / A2">
+        </div>
+        <div style="display:flex;gap:10px;align-items:end;">
+          <button class="btn btn-ghost" style="width:100%" id="applyBtn">Apply</button>
+          <button class="btn btn-primary" style="width:100%" id="pdfBtn">Export PDF</button>
+        </div>
+      </div>
+
+      <div style="height:14px"></div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Register No</th>
+              <th>Name</th>
+              <th>Program</th>
+              <th>Section</th>
+              <th>Lab</th>
+              <th>Reason</th>
+              <th>From-To</th>
+              <th>Proof</th>
+              <th>Faculty</th>
+              <th>HOD</th>
+              <th>Final</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.29/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="js/common.js"></script>
+<script src="js/app.js"></script>
+
+<script>
+  initThemeToggle();
+  const sess = requireAuth(["CLASS_COORDINATOR"]);
+  headerBind();
+
+  function getFiltered(){
+    const prog = document.getElementById("fProgram").value.trim().toLowerCase();
+    const sec = document.getElementById("fSection").value.trim().toLowerCase();
+    const scoped = scopeLabForApprover(sess, Store.lab());
+
+    return scoped.filter(r=>{
+      const okP = !prog || (r.program||"").toLowerCase().includes(prog);
+      const okS = !sec || (r.section||"").toLowerCase().includes(sec);
+      return okP && okS;
+    });
+  }
+
+  function render(){
+    const list = getFiltered();
+    document.getElementById("rows").innerHTML = list.map(r=>`
+      <tr>
+        <td><b>${r.regNo}</b></td>
+        <td>${r.studentName}</td>
+        <td>${r.program}</td>
+        <td>${r.section}</td>
+        <td>${r.lab}</td>
+        <td>${r.reason}</td>
+        <td>${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}</td>
+        <td>${r.proofName || "-"}</td>
+        <td>${statusPill(r.statusFACULTY)}</td>
+        <td>${statusPill(r.statusHOD)}</td>
+        <td>${statusPill(r.finalStatus)}</td>
+        <td style="display:flex;gap:8px;">
+          <button class="btn btn-primary btn-mini" ${r.statusFACULTY!=="PENDING"?"disabled":""} onclick="act('APPROVED','${r.id}')">Approve</button>
+          <button class="btn btn-danger btn-mini" ${r.statusFACULTY!=="PENDING"?"disabled":""} onclick="act('REJECTED','${r.id}')">Reject</button>
+        </td>
+      </tr>
+    `).join("") || `<tr><td colspan="12" style="color:var(--muted);font-weight:900;">No lab requests in scope.</td></tr>`;
+  }
+
+  window.act = function(decision, id){
+    window.actLAB_FACULTY(sess, id, decision);
+    toast("Updated");
+    render();
+  };
+
+  document.getElementById("applyBtn").onclick = render;
+
+  document.getElementById("pdfBtn").onclick = ()=>{
+    const list = getFiltered().filter(r=>r.finalStatus==="APPROVED");
+    const headers = ["RegNo","Name","Program","Section","Lab","Reason","From-To","Faculty By","HOD By","Final"];
+    const rows = list.map(r=>[
+      r.regNo, r.studentName, r.program, r.section, r.lab, r.reason,
+      `${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}`,
+      r.facultyBy || "-", r.hodBy || "-", r.finalStatus
+    ]);
+    exportPdfFromRows("Lab Approved List (Faculty Scope)", headers, rows);
+  };
+
+  render();
+</script>
+</body>
+</html>

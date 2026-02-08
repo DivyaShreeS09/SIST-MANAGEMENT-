@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Student Dashboard</title>
+  <link rel="stylesheet" href="css/theme.css"/>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <img src="assets/logo.png" alt="SIST Logo">
+        <div>
+          <div class="brand-title">SIST MANAGEMENT SYSTEM</div>
+          <div class="brand-sub">Student Portal</div>
+        </div>
+      </div>
+      <div class="right">
+        <button class="btn btn-ghost btn-mini" data-theme-toggle>Dark mode</button>
+        <span class="chip">Logged in: <span data-who>-</span></span>
+        <button class="btn btn-primary btn-mini" data-signout>Sign Out</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="card">
+      <div class="card-inner">
+        <div class="section-title">Student Dashboard</div>
+
+        <div class="grid3">
+          <div class="card">
+            <div class="card-inner">
+              <div class="badge">⚡ Quick Action</div>
+              <div style="height:10px"></div>
+              <button class="btn btn-primary" style="width:100%" onclick="location.href='student_od.html'">Request OD</button>
+              <div style="height:10px"></div>
+              <button class="btn btn-ghost" style="width:100%" onclick="location.href='student_lab.html'">Request Lab Access</button>
+            </div>
+          </div>
+
+          <div class="card" id="hostelQuick" style="display:none;">
+            <div class="card-inner">
+              <div class="badge">🏠 Hostel</div>
+              <div style="height:10px"></div>
+              <button class="btn btn-primary" style="width:100%" onclick="location.href='student_hostel.html'">Request Outpass</button>
+              <div style="height:10px"></div>
+              <div style="color:var(--muted);font-weight:900;font-size:12px;">
+                Visible only for hostel students.
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-inner">
+              <div class="badge">👤 Profile</div>
+              <div style="height:10px"></div>
+              <div style="font-weight:1000;">Register No: <span id="regNo"></span></div>
+              <div style="font-weight:900;color:var(--muted);margin-top:4px;" id="prog"></div>
+              <div style="font-weight:900;color:var(--muted);" id="sec"></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:16px"></div>
+
+        <div class="grid2">
+          <div class="card">
+            <div class="card-inner">
+              <div class="card-title">Your OD History</div>
+              <div style="height:10px"></div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Reason</th>
+                      <th>From-To</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="odRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-inner">
+              <div class="card-title">Your Lab Access History</div>
+              <div style="height:10px"></div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Lab</th>
+                      <th>From-To</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="labRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:16px"></div>
+
+        <div class="card" id="hostelHistoryCard" style="display:none;">
+          <div class="card-inner">
+            <div class="card-title">Your Hostel Outpass History</div>
+            <div style="height:10px"></div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Purpose</th>
+                    <th>From-To</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="hosRows"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="js/common.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    initThemeToggle();
+    const sess = requireAuth(["STUDENT"]);
+    headerBind();
+
+    document.getElementById("regNo").textContent = sess.username;
+    document.getElementById("prog").textContent = sess.program;
+    document.getElementById("sec").textContent = `Section: ${sess.section}`;
+
+    // hostel visibility
+    if(sess.hosteller){
+      document.getElementById("hostelQuick").style.display = "";
+      document.getElementById("hostelHistoryCard").style.display = "";
+    }
+
+    // OD rows
+    const od = Store.od().filter(r=>r.studentId===sess.id);
+    document.getElementById("odRows").innerHTML = od.map(r=>`
+      <tr>
+        <td><b>${r.reason}</b></td>
+        <td>${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}</td>
+        <td>${statusPill(r.finalStatus)}</td>
+      </tr>
+    `).join("") || `<tr><td colspan="3" style="color:var(--muted);font-weight:900;">No OD requests yet.</td></tr>`;
+
+    // LAB rows
+    const lab = Store.lab().filter(r=>r.studentId===sess.id);
+    document.getElementById("labRows").innerHTML = lab.map(r=>`
+      <tr>
+        <td><b>${r.lab}</b></td>
+        <td>${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}</td>
+        <td>${statusPill(r.finalStatus)}</td>
+      </tr>
+    `).join("") || `<tr><td colspan="3" style="color:var(--muted);font-weight:900;">No lab requests yet.</td></tr>`;
+
+    // Hostel rows
+    const hos = Store.hostel().filter(r=>r.studentId===sess.id);
+    if(sess.hosteller){
+      document.getElementById("hosRows").innerHTML = hos.map(r=>`
+        <tr>
+          <td><b>${r.purpose}</b></td>
+          <td>${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}</td>
+          <td>${statusPill(r.finalStatus)}</td>
+        </tr>
+      `).join("") || `<tr><td colspan="3" style="color:var(--muted);font-weight:900;">No outpass requests yet.</td></tr>`;
+    }
+  </script>
+</body>
+</html>

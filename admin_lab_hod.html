@@ -1,145 +1,136 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Lab - HOD</title>
-  <link rel="stylesheet" href="css/theme.css"/>
+  <link rel="stylesheet" href="./css/theme.css"/>
+  <script src="./js/app.js"></script>
+  <script src="./js/common.js"></script>
 </head>
 <body>
-<header class="topbar">
-  <div class="topbar-inner">
+<div class="container">
+  <div class="topbar">
     <div class="brand">
-      <img src="assets/logo.png" alt="SIST Logo">
-      <div>
-        <div class="brand-title">SIST MANAGEMENT SYSTEM</div>
-        <div class="brand-sub">Lab Approval - HOD</div>
+      <img src="./assets/logo.png" alt="Logo">
+      <div class="title">
+        <b>SIST MANAGEMENT SYSTEM</b>
+        <span>Lab Approval - HOD</span>
       </div>
     </div>
-    <div class="right">
-      <button class="btn btn-ghost btn-mini" data-theme-toggle>Dark mode</button>
-      <span class="chip"><span data-role>-</span> | <span data-who>-</span></span>
-      <button class="btn btn-primary btn-mini" data-signout>Sign Out</button>
+    <div class="actions">
+      <button class="btn btn-ghost" data-theme-toggle onclick="toggleTheme()">Dark mode</button>
+      <span class="pill">HOD | Lab</span>
+      <button class="btn btn-primary" onclick="signOut()">Sign Out</button>
     </div>
   </div>
-</header>
 
-<div class="container">
+  <div style="height:16px"></div>
+
   <div class="card">
-    <div class="card-inner">
-      <div class="section-title">Lab Approval Dashboard (Final)</div>
+    <h2>Lab Approval Dashboard</h2>
 
-      <div class="grid3">
-        <div>
-          <label>Filter by Program</label>
-          <input id="fProgram" placeholder="e.g., B.E CSE AIML">
-        </div>
-        <div>
-          <label>Filter by Section</label>
-          <input id="fSection" placeholder="e.g., A1 / A2">
-        </div>
-        <div style="display:flex;gap:10px;align-items:end;">
-          <button class="btn btn-ghost" style="width:100%" id="applyBtn">Apply</button>
-          <button class="btn btn-primary" style="width:100%" id="pdfBtn">Export PDF</button>
-        </div>
+    <div class="grid-2">
+      <div>
+        <label>Filter by Program</label>
+        <input id="fProgram" placeholder="e.g., B.E CSE AIML">
       </div>
-
-      <div style="height:14px"></div>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Register No</th>
-              <th>Name</th>
-              <th>Program</th>
-              <th>Section</th>
-              <th>Lab</th>
-              <th>Reason</th>
-              <th>From-To</th>
-              <th>Proof</th>
-              <th>Faculty</th>
-              <th>HOD</th>
-              <th>Final</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
+      <div>
+        <label>Filter by Section</label>
+        <input id="fSection" placeholder="e.g., A1/A2">
       </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>Filter by Year</label>
+        <input id="fYear" placeholder="e.g., 3">
+      </div>
+      <div style="display:flex; gap:10px; align-items:flex-end;">
+        <button class="btn btn-ghost" id="applyBtn" type="button">Apply</button>
+        <button class="btn btn-primary" id="exportBtn" type="button">Export Approved List (PDF)</button>
+      </div>
+    </div>
 
+    <div class="hr"></div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Reg No</th><th>Name</th><th>Program</th><th>Section</th>
+            <th>Lab</th><th>Reason</th><th>From</th><th>To</th><th>Proof</th>
+            <th>Mentor</th><th>HOD</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="body"></tbody>
+      </table>
     </div>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
-
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.29/dist/jspdf.plugin.autotable.min.js"></script>
-<script src="js/common.js"></script>
-<script src="js/app.js"></script>
-
 <script>
-  initThemeToggle();
-  const sess = requireAuth(["HOD"]);
-  headerBind();
+  const user = requireAuth();
+  updateThemeButtonText();
+  if(user.role !== "HOD"){ alert("Unauthorized"); location.href="login.html"; }
 
-  function getFiltered(){
-    const prog = document.getElementById("fProgram").value.trim().toLowerCase();
-    const sec = document.getElementById("fSection").value.trim().toLowerCase();
-    const list = Store.lab();
-
-    return list.filter(r=>{
-      const okP = !prog || (r.program||"").toLowerCase().includes(prog);
-      const okS = !sec || (r.section||"").toLowerCase().includes(sec);
-      return okP && okS;
-    });
+  function matchesFilters(r){
+    const yp = fProgram.value.trim().toLowerCase();
+    const ys = fSection.value.trim().toLowerCase();
+    const yy = fYear.value.trim();
+    const okP = !yp || (r.program||"").toLowerCase().includes(yp);
+    const okS = !ys || (r.section||"").toLowerCase().includes(ys);
+    const okY = !yy || String(r.year) === String(yy);
+    return okP && okS && okY;
   }
 
   function render(){
-    const list = getFiltered();
-    document.getElementById("rows").innerHTML = list.map(r=>`
-      <tr>
-        <td><b>${r.regNo}</b></td>
-        <td>${r.studentName}</td>
-        <td>${r.program}</td>
-        <td>${r.section}</td>
-        <td>${r.lab}</td>
-        <td>${r.reason}</td>
-        <td>${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}</td>
-        <td>${r.proofName || "-"}</td>
-        <td>${statusPill(r.statusFACULTY)} <span style="color:var(--muted);font-weight:900;">(${r.facultyBy||"-"})</span></td>
-        <td>${statusPill(r.statusHOD)}</td>
-        <td>${statusPill(r.finalStatus)}</td>
-        <td style="display:flex;gap:8px;">
-          <button class="btn btn-primary btn-mini"
-            ${ (r.statusFACULTY!=="APPROVED" || r.statusHOD!=="PENDING") ? "disabled":"" }
-            onclick="act('APPROVED','${r.id}')">Approve</button>
-          <button class="btn btn-danger btn-mini"
-            ${ (r.statusFACULTY!=="APPROVED" || r.statusHOD!=="PENDING") ? "disabled":"" }
-            onclick="act('REJECTED','${r.id}')">Reject</button>
-        </td>
-      </tr>
-    `).join("") || `<tr><td colspan="12" style="color:var(--muted);font-weight:900;">No lab requests found.</td></tr>`;
+    let list = DB.lab().filter(matchesFilters);
+    body.innerHTML = list.length ? list.map(r=>{
+      const canAct = (r.statusMENTOR==="APPROVED" && r.statusHOD==="PENDING");
+      const actionHtml = canAct
+        ? `<button class="btn btn-success" onclick="act('${r.id}','APPROVED')">Approve</button>
+           <button class="btn btn-danger" onclick="act('${r.id}','REJECTED')">Reject</button>`
+        : `<span class="small">${r.statusMENTOR!=="APPROVED" ? "Waiting Mentor" : "—"}</span>`;
+
+      return `
+        <tr>
+          <td>${r.regNo}</td><td>${r.studentName}</td><td>${r.program}</td><td>${r.section}</td>
+          <td>${r.lab}</td><td>${r.reason}</td>
+          <td>${formatDT(r.fromDate,r.fromTime)}</td>
+          <td>${formatDT(r.toDate,r.toTime)}</td>
+          <td>${r.proofName||"-"}</td>
+          <td>${badge(r.statusMENTOR)}</td>
+          <td>${badge(r.statusHOD)}</td>
+          <td style="display:flex; gap:8px; flex-wrap:wrap;">${actionHtml}</td>
+        </tr>
+      `;
+    }).join("") : `<tr><td colspan="12">No requests found.</td></tr>`;
   }
 
-  window.act = function(decision, id){
-    window.actLAB_HOD(sess, id, decision);
-    toast("Updated");
+  function act(id, status){
+    const list = DB.lab();
+    const r = list.find(x=>x.id===id);
+    if(!r) return;
+
+    r.statusHOD = status;
+    r.hodBy = user.id;
+    r.timeline = r.timeline || [];
+    r.timeline.unshift({at:new Date().toISOString(), by:user.name, action:`HOD_${status}`});
+
+    DB.saveLab(list);
     render();
-  };
 
-  document.getElementById("applyBtn").onclick = render;
+    if(status==="APPROVED") alert("Final approval done. Student can download approval letter PDF.");
+  }
 
-  document.getElementById("pdfBtn").onclick = ()=>{
-    const list = getFiltered().filter(r=>r.finalStatus==="APPROVED");
-    const headers = ["RegNo","Name","Program","Section","Lab","Reason","From-To","Faculty By","HOD By","Final"];
-    const rows = list.map(r=>[
-      r.regNo, r.studentName, r.program, r.section, r.lab, r.reason,
-      `${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}`,
-      r.facultyBy || "-", r.hodBy || "-", r.finalStatus
-    ]);
-    exportPdfFromRows("Lab Approved List (HOD)", headers, rows);
+  applyBtn.onclick = render;
+
+  exportBtn.onclick = ()=>{
+    exportApprovedLab(user, {
+      year: fYear.value.trim(),
+      program: fProgram.value.trim(),
+      section: fSection.value.trim()
+    });
   };
 
   render();

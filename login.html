@@ -1,84 +1,155 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Login - SIST Management</title>
-  <link rel="stylesheet" href="css/theme.css"/>
+  <link rel="stylesheet" href="./css/theme.css" />
+  <script src="./js/app.js"></script>
+  <script src="./js/common.js"></script>
+  <style>
+    body{
+      background:
+        linear-gradient(0deg, rgba(0,0,0,.20), rgba(0,0,0,.10)),
+        url("./assets/scas.jpg") center/cover no-repeat fixed;
+    }
+    [data-theme="light"] body{
+      background:
+        linear-gradient(0deg, rgba(255,255,255,.15), rgba(255,255,255,.08)),
+        url("./assets/scas.jpg") center/cover no-repeat fixed;
+    }
+    .login-wrap{
+      min-height: 100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 28px 14px;
+    }
+    .login-card{
+      width: min(520px, 92vw);
+      border-radius: 28px;
+      padding: 20px;
+      background: rgba(10,12,16,.45);
+      border: 1px solid rgba(255,77,0,.20);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 25px 70px rgba(0,0,0,.40);
+    }
+    [data-theme="light"] .login-card{
+      background: rgba(255,255,255,.40);
+      border: 1px solid rgba(255,77,0,.18);
+    }
+    .login-head{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:10px;
+      padding: 8px 0 12px;
+      text-align:center;
+    }
+    .login-head img{
+      height: 60px;
+      border-radius: 14px;
+      object-fit:contain;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    .login-head h1{
+      margin:0;
+      font-size: 20px;
+      letter-spacing: .8px;
+      color: rgba(255,255,255,.95);
+    }
+    [data-theme="light"] .login-head h1{
+      color:#111;
+    }
+    .login-head p{
+      margin:0;
+      font-size: 12px;
+      color: rgba(255,255,255,.75);
+      font-weight: 700;
+      letter-spacing: .2px;
+    }
+    [data-theme="light"] .login-head p{ color: rgba(0,0,0,.60); }
+
+    /* FIX visibility in dark mode inputs */
+    .login-card label{ color: rgba(255,255,255,.90); }
+    [data-theme="light"] .login-card label{ color: rgba(0,0,0,.60); }
+
+    .rightTop{
+      display:flex;
+      justify-content:flex-end;
+      margin-bottom: 8px;
+    }
+  </style>
 </head>
-<body class="login-bg">
-
-  <div class="login-card">
-    <div class="login-top">
-      <img src="assets/logo.png" alt="SIST Logo"/>
-    </div>
-
-    <div class="login-body">
-      <div class="login-title">SIST MANAGEMENT SYSTEM</div>
-      <div class="login-sub">Secure Access Portal</div>
-
-      <div style="text-align:right;margin-bottom:10px;">
-        <button class="btn btn-ghost btn-mini" data-theme-toggle>Dark mode</button>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="rightTop">
+        <button class="btn btn-ghost" data-theme-toggle onclick="toggleTheme()">Dark mode</button>
       </div>
 
-      <label>Login as</label>
-      <select id="role">
-        <option value="STUDENT">Student</option>
-        <option value="CLASS_COORDINATOR">Class Coordinator</option>
-        <option value="YEAR_COORDINATOR">Year Coordinator</option>
-        <option value="HOD">HOD</option>
-        <option value="WARDEN">Warden</option>
-        <option value="CHIEF_WARDEN">Chief Warden</option>
-        <option value="SECURITY">Security</option>
-      </select>
-
-      <div style="height:10px;"></div>
-
-      <label>Username</label>
-      <input id="username" placeholder="Enter username" autocomplete="username"/>
-
-      <div style="height:10px;"></div>
-
-      <label>Password</label>
-      <input id="password" type="password" placeholder="Enter password" autocomplete="current-password"/>
-
-      <div class="login-actions">
-        <button class="btn btn-primary" id="loginBtn">Sign In</button>
+      <div class="login-head">
+        <img src="./assets/logo.png" alt="Logo"/>
+        <h1>SIST MANAGEMENT SYSTEM</h1>
+        <p>Secure Access Portal</p>
       </div>
+
+      <form id="loginForm">
+        <label>Login as</label>
+        <select id="role" required>
+          <option value="STUDENT">Student</option>
+          <option value="CLASS_COORDINATOR">Class Coordinator</option>
+          <option value="YEAR_COORDINATOR">Year Coordinator</option>
+          <option value="HOD">HOD</option>
+          <option value="WARDEN">Warden</option>
+          <option value="CHIEF_WARDEN">Chief Warden</option>
+          <option value="SECURITY">Security</option>
+        </select>
+
+        <label>Username</label>
+        <input id="username" placeholder="Enter username" required />
+
+        <label>Password</label>
+        <input id="password" type="password" placeholder="Enter password" required />
+
+        <div style="margin-top:14px;">
+          <button class="btn btn-primary" style="width:100%;">Sign In</button>
+        </div>
+
+        <div class="notice" id="msg" style="margin-top:14px; display:none;"></div>
+      </form>
+
+      <footer>Tip: use seeded demo credentials (password123)</footer>
     </div>
   </div>
 
-  <div class="toast" id="toast"></div>
+<script>
+  updateThemeButtonText();
 
-  <script src="js/common.js"></script>
-  <script src="js/app.js"></script>
-  <script>
-    initThemeToggle();
+  const msg = document.getElementById("msg");
+  const showMsg=(t)=>{ msg.style.display="block"; msg.textContent=t; };
 
-    document.getElementById("loginBtn").addEventListener("click", ()=>{
-      const r = document.getElementById("role").value;
-      const u = document.getElementById("username").value.trim();
-      const p = document.getElementById("password").value.trim();
+  document.getElementById("loginForm").addEventListener("submit",(e)=>{
+    e.preventDefault();
+    const role = document.getElementById("role").value;
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
 
-      if(!u || !p){ toast("Enter username & password"); return; }
+    const u = DB.users().find(x => x.role===role && x.username===username && x.password===password);
+    if(!u){
+      showMsg("Invalid credentials. Check username/password/role.");
+      return;
+    }
+    localStorage.setItem("sist_session", JSON.stringify({userId: u.id}));
 
-      const sess = window.APP_LOGIN(r,u,p);
-      if(!sess){ toast("Invalid credentials"); return; }
-
-      setSession(sess);
-
-      // redirect by role (keep simple & predictable)
-      const map = {
-        STUDENT: "student_dashboard.html",
-        CLASS_COORDINATOR: "admin_od_cc.html",
-        YEAR_COORDINATOR: "admin_od_yc.html",
-        HOD: "admin_od_hod.html",
-        WARDEN: "admin_hostel_warden.html",
-        CHIEF_WARDEN: "admin_hostel_chief.html",
-        SECURITY: "admin_hostel_security.html"
-      };
-      window.location.href = map[sess.role] || "student_dashboard.html";
-    });
-  </script>
+    if(u.role==="STUDENT") return window.location.href="student_dashboard.html";
+    if(u.role==="CLASS_COORDINATOR") return window.location.href="admin_od_cc.html";
+    if(u.role==="YEAR_COORDINATOR") return window.location.href="admin_od_yc.html";
+    if(u.role==="HOD") return window.location.href="admin_od_hod.html";
+    if(u.role==="CHIEF_WARDEN") return window.location.href="admin_hostel_chief.html";
+    if(u.role==="WARDEN") return window.location.href="admin_hostel_warden.html";
+    if(u.role==="SECURITY") return window.location.href="admin_hostel_security.html";
+  });
+</script>
 </body>
 </html>

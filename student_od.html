@@ -1,167 +1,172 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>OD Request - Student</title>
-  <link rel="stylesheet" href="css/theme.css"/>
+  <link rel="stylesheet" href="./css/theme.css"/>
+  <script src="./js/app.js"></script>
+  <script src="./js/common.js"></script>
 </head>
 <body>
-<header class="topbar">
-  <div class="topbar-inner">
+<div class="container">
+  <div class="topbar">
     <div class="brand">
-      <img src="assets/logo.png" alt="SIST Logo">
-      <div>
-        <div class="brand-title">SIST MANAGEMENT SYSTEM</div>
-        <div class="brand-sub">OD Request</div>
+      <img src="./assets/logo.png" alt="Logo">
+      <div class="title">
+        <b>SIST MANAGEMENT SYSTEM</b>
+        <span>OD Request</span>
       </div>
     </div>
-    <div class="right">
-      <button class="btn btn-ghost btn-mini" data-theme-toggle>Dark mode</button>
-      <span class="chip">Logged in: <span data-who>-</span></span>
-      <button class="btn btn-primary btn-mini" onclick="location.href='student_dashboard.html'">Dashboard</button>
-      <button class="btn btn-primary btn-mini" data-signout>Sign Out</button>
+
+    <div class="actions">
+      <button class="btn btn-ghost" data-theme-toggle onclick="toggleTheme()">Dark mode</button>
+      <span class="pill" id="who"></span>
+      <button class="btn btn-ghost" onclick="location.href='student_dashboard.html'">Dashboard</button>
+      <button class="btn btn-primary" onclick="signOut()">Sign Out</button>
     </div>
   </div>
-</header>
 
-<div class="container">
+  <div style="height:16px"></div>
+
   <div class="card">
-    <div class="card-inner">
-      <div class="section-title">OD Request</div>
-
-      <div class="grid2">
+    <h2>OD Request</h2>
+    <form id="odForm">
+      <div class="grid-2">
         <div>
-          <label>Register No (auto)</label>
-          <input id="regNo" disabled>
+          <label>Register No</label>
+          <input id="regNo" required>
         </div>
         <div>
-          <label>Name (auto)</label>
-          <input id="name" disabled>
-        </div>
-      </div>
-
-      <div class="grid2" style="margin-top:12px;">
-        <div>
-          <label>Program (auto)</label>
-          <input id="program" disabled>
+          <label>Name</label>
+          <input id="name" required>
         </div>
         <div>
-          <label>Section (auto)</label>
-          <input id="section" disabled>
+          <label>Program</label>
+          <input id="program" required>
+        </div>
+        <div>
+          <label>Section</label>
+          <input id="section" required>
         </div>
       </div>
-
-      <div style="height:12px"></div>
 
       <label>Reason / Subject</label>
-      <textarea id="reason" placeholder="e.g., Workshop / Technical Event / Hackathon (mandatory)"></textarea>
+      <textarea id="reason" required placeholder="e.g., workshop / Technical Event / Hackathon"></textarea>
 
-      <div style="height:12px"></div>
-
-      <div class="grid2">
+      <div class="form-row">
         <div>
           <label>From Date</label>
-          <input id="fromDate" type="date">
+          <input type="date" id="fromDate" required>
         </div>
         <div>
           <label>To Date</label>
-          <input id="toDate" type="date">
+          <input type="date" id="toDate" required>
         </div>
       </div>
-
-      <div class="grid2" style="margin-top:12px;">
+      <div class="form-row">
         <div>
           <label>From Time</label>
-          <input id="fromTime" type="time">
+          <input type="time" id="fromTime" required>
         </div>
         <div>
           <label>To Time</label>
-          <input id="toTime" type="time">
+          <input type="time" id="toTime" required>
         </div>
       </div>
-
-      <div style="height:12px"></div>
 
       <label>Upload Proof (Letter / Invite / Approval)</label>
-      <input id="proof" type="file" accept=".pdf,.jpg,.jpeg,.png">
+      <input type="file" id="proof" required>
 
-      <div style="height:14px"></div>
-      <button class="btn btn-primary" style="width:100%" id="submitBtn">Submit OD Request</button>
-
-      <div style="height:18px"></div>
-
-      <div class="card">
-        <div class="card-inner">
-          <div class="card-title">Your OD History</div>
-          <div style="height:10px"></div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Reason</th>
-                  <th>From-To</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody id="rows"></tbody>
-            </table>
-          </div>
-        </div>
+      <div style="margin-top:14px;">
+        <button class="btn btn-primary" style="width:100%;">Submit OD Request</button>
       </div>
+    </form>
 
+    <div class="hr"></div>
+
+    <h2>Your OD History</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Reason</th>
+            <th>From</th>
+            <th>To</th>
+            <th>CC</th>
+            <th>YC</th>
+            <th>HOD</th>
+            <th>PDF</th>
+          </tr>
+        </thead>
+        <tbody id="odBody"></tbody>
+      </table>
     </div>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
-
-<script src="js/common.js"></script>
-<script src="js/app.js"></script>
 <script>
-  initThemeToggle();
-  const sess = requireAuth(["STUDENT"]);
-  headerBind();
+  const u = requireAuth();
+  updateThemeButtonText();
+  document.getElementById("who").textContent = `Logged in: ${u.name}`;
 
-  document.getElementById("regNo").value = sess.username;
-  document.getElementById("name").value = sess.name;
-  document.getElementById("program").value = sess.program;
-  document.getElementById("section").value = sess.section;
+  // Autofill but still required (user can edit if needed)
+  regNo.value = u.username;
+  name.value = u.name;
+  program.value = u.program;
+  section.value = u.section;
 
   function render(){
-    const list = Store.od().filter(r=>r.studentId===sess.id);
-    document.getElementById("rows").innerHTML = list.map(r=>`
-      <tr>
-        <td><b>${r.reason}</b></td>
-        <td>${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}</td>
-        <td>${statusPill(r.finalStatus)}</td>
-      </tr>
-    `).join("") || `<tr><td colspan="3" style="color:var(--muted);font-weight:900;">No OD requests yet.</td></tr>`;
+    const list = DB.od().filter(r=>r.studentId===u.id);
+    odBody.innerHTML = list.length ? list.map(r=>{
+      const finalOk = deriveCCYC(r)==="APPROVED" && (r.statusHOD||"") === "APPROVED";
+      return `
+        <tr>
+          <td>${r.reason}</td>
+          <td>${formatDT(r.fromDate,r.fromTime)}</td>
+          <td>${formatDT(r.toDate,r.toTime)}</td>
+          <td>${badge(r.statusCC)}</td>
+          <td>${badge(r.statusYC)}</td>
+          <td>${badge(r.statusHOD)}</td>
+          <td>${finalOk ? `<button class="btn btn-ghost" onclick="downloadODLetter(${JSON.stringify(r).replaceAll('"','&quot;')})">Download</button>` : `<span class="small">—</span>`}</td>
+        </tr>
+      `;
+    }).join("") : `<tr><td colspan="7">No OD requests yet.</td></tr>`;
   }
   render();
 
-  document.getElementById("submitBtn").addEventListener("click", ()=>{
-    const reason = document.getElementById("reason").value.trim();
-    const fromDate = document.getElementById("fromDate").value;
-    const toDate = document.getElementById("toDate").value;
-    const fromTime = document.getElementById("fromTime").value;
-    const toTime = document.getElementById("toTime").value;
-    const proof = document.getElementById("proof").files[0];
+  odForm.addEventListener("submit",(e)=>{
+    e.preventDefault();
 
-    if(!reason || !fromDate || !toDate || !fromTime || !toTime){
-      toast("Fill all mandatory fields");
-      return;
-    }
+    const f = proof.files[0];
+    if(!f) return alert("Proof file is required.");
 
-    window.createOD(sess, {
-      reason, fromDate, toDate, fromTime, toTime,
-      proofName: proof ? proof.name : ""
+    const od = DB.od();
+    const id = "od" + (Date.now());
+    od.unshift({
+      id, studentId: u.id,
+      regNo: regNo.value.trim(),
+      studentName: name.value.trim(),
+      program: program.value.trim(),
+      section: section.value.trim(),
+      year: u.year, dept: u.dept,
+      reason: reason.value.trim(),
+      fromDate: fromDate.value, toDate: toDate.value,
+      fromTime: fromTime.value, toTime: toTime.value,
+      proofName: f.name,
+
+      statusCC:"PENDING", ccBy:null,
+      statusYC:"PENDING", ycBy:null,
+      statusHOD:"PENDING", hodBy:null,
+      timeline:[{at:new Date().toISOString(), by:u.name, action:"CREATED"}]
     });
 
-    toast("OD request submitted");
-    document.getElementById("reason").value = "";
-    document.getElementById("proof").value = "";
+    DB.saveOD(od);
+    odForm.reset();
+
+    regNo.value = u.username; name.value=u.name; program.value=u.program; section.value=u.section;
     render();
+    alert("OD request submitted.");
   });
 </script>
 </body>

@@ -1,96 +1,142 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Hostel - Warden</title>
-  <link rel="stylesheet" href="css/theme.css"/>
+  <link rel="stylesheet" href="./css/theme.css"/>
+  <script src="./js/app.js"></script>
+  <script src="./js/common.js"></script>
 </head>
 <body>
-<header class="topbar">
-  <div class="topbar-inner">
+<div class="container">
+  <div class="topbar">
     <div class="brand">
-      <img src="assets/logo.png" alt="SIST Logo">
-      <div>
-        <div class="brand-title">SIST MANAGEMENT SYSTEM</div>
-        <div class="brand-sub">Hostel Approval - Warden</div>
+      <img src="./assets/logo.png" alt="Logo">
+      <div class="title">
+        <b>SIST MANAGEMENT SYSTEM</b>
+        <span>Hostel Approval - Warden</span>
       </div>
     </div>
-    <div class="right">
-      <button class="btn btn-ghost btn-mini" data-theme-toggle>Dark mode</button>
-      <span class="chip"><span data-role>-</span> | <span data-who>-</span></span>
-      <button class="btn btn-primary btn-mini" data-signout>Sign Out</button>
+    <div class="actions">
+      <button class="btn btn-ghost" data-theme-toggle onclick="toggleTheme()">Dark mode</button>
+      <span class="pill">WARDEN | Warden</span>
+      <button class="btn btn-primary" onclick="signOut()">Sign Out</button>
     </div>
   </div>
-</header>
 
-<div class="container">
+  <div style="height:16px"></div>
+
   <div class="card">
-    <div class="card-inner">
-      <div class="section-title">Hostel Outpass Approval</div>
+    <h2>Warden Dashboard</h2>
 
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Reg No</th>
-              <th>Name</th>
-              <th>Program</th>
-              <th>Section</th>
-              <th>Purpose</th>
-              <th>From-To</th>
-              <th>Proof</th>
-              <th>Warden</th>
-              <th>Chief Warden</th>
-              <th>Security</th>
-              <th>Final</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
+    <div class="grid-2">
+      <div>
+        <label>Filter by Program</label>
+        <input id="fProgram" placeholder="e.g., B.E CSE AIML">
       </div>
+      <div>
+        <label>Filter by Section</label>
+        <input id="fSection" placeholder="e.g., A2">
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>Filter by Year</label>
+        <input id="fYear" placeholder="e.g., 3">
+      </div>
+      <div style="display:flex; gap:10px; align-items:flex-end;">
+        <button class="btn btn-ghost" id="applyBtn" type="button">Apply</button>
+        <button class="btn btn-primary" id="exportBtn" type="button">Export Approved List (PDF)</button>
+      </div>
+    </div>
 
+    <div class="hr"></div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Reg No</th><th>Name</th><th>Program</th><th>Section</th>
+            <th>Purpose</th><th>From</th><th>To</th><th>Proof</th>
+            <th>Chief</th><th>Warden</th><th>Security</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="body"></tbody>
+      </table>
     </div>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
-
-<script src="js/common.js"></script>
-<script src="js/app.js"></script>
 <script>
-  initThemeToggle();
-  const sess = requireAuth(["WARDEN"]);
-  headerBind();
+  const user = requireAuth();
+  updateThemeButtonText();
+  if(user.role !== "WARDEN"){ alert("Unauthorized"); location.href="login.html"; }
 
-  function render(){
-    const list = scopeHostelForApprover(sess, Store.hostel());
-    document.getElementById("rows").innerHTML = list.map(r=>`
-      <tr>
-        <td><b>${r.regNo}</b></td>
-        <td>${r.studentName}</td>
-        <td>${r.program}</td>
-        <td>${r.section}</td>
-        <td>${r.purpose}</td>
-        <td>${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}</td>
-        <td>${r.proofName || "-"}</td>
-        <td>${statusPill(r.statusWARDEN)}</td>
-        <td>${statusPill(r.statusCHIEF)}</td>
-        <td>${statusPill(r.statusSECURITY)}</td>
-        <td>${statusPill(r.finalStatus)}</td>
-        <td style="display:flex;gap:8px;">
-          <button class="btn btn-primary btn-mini" onclick="act('APPROVED','${r.id}')">Approve</button>
-          <button class="btn btn-danger btn-mini" onclick="act('REJECTED','${r.id}')">Reject</button>
-        </td>
-      </tr>
-    `).join("") || `<tr><td colspan="12" style="color:var(--muted);font-weight:900;">No pending outpass requests.</td></tr>`;
+  function matchesFilters(r){
+    const yp = fProgram.value.trim().toLowerCase();
+    const ys = fSection.value.trim().toLowerCase();
+    const yy = fYear.value.trim();
+
+    const okP = !yp || (r.program||"").toLowerCase().includes(yp);
+    const okS = !ys || (r.section||"").toLowerCase().includes(ys);
+    const okY = !yy || String(r.year) === String(yy);
+    return okP && okS && okY;
   }
 
-  window.act = function(decision, id){
-    window.actHOSTEL_WARDEN(sess, id, decision);
-    toast("Updated");
+  function render(){
+    let list = DB.hostel().filter(matchesFilters);
+    body.innerHTML = list.length ? list.map(r=>{
+      const canAct = (r.statusWARDEN==="PENDING");
+      const actionHtml = canAct
+        ? `<button class="btn btn-success" onclick="act('${r.id}','APPROVED')">Approve</button>
+           <button class="btn btn-danger" onclick="act('${r.id}','REJECTED')">Reject</button>`
+        : `<span class="small">${r.statusWARDEN==="LOCKED" ? "Waiting Chief Warden" : "—"}</span>`;
+
+      return `
+        <tr>
+          <td>${r.regNo}</td><td>${r.studentName}</td><td>${r.program}</td><td>${r.section}</td>
+          <td>${r.purpose}</td>
+          <td>${formatDT(r.fromDate,r.fromTime)}</td>
+          <td>${formatDT(r.toDate,r.toTime)}</td>
+          <td>${r.proofName||"-"}</td>
+          <td>${badge(r.statusCHIEF)}</td>
+          <td>${badge(r.statusWARDEN)}</td>
+          <td>${badge(r.statusSECURITY)}</td>
+          <td style="display:flex; gap:8px; flex-wrap:wrap;">${actionHtml}</td>
+        </tr>
+      `;
+    }).join("") : `<tr><td colspan="12">No requests found.</td></tr>`;
+  }
+
+  function act(id, status){
+    const list = DB.hostel();
+    const r = list.find(x=>x.id===id);
+    if(!r) return;
+
+    r.statusWARDEN = status;
+    r.wardenBy = user.id;
+    r.timeline = r.timeline || [];
+    r.timeline.unshift({at:new Date().toISOString(), by:user.name, action:`WARDEN_${status}`});
+
+    if(status==="APPROVED"){
+      r.statusSECURITY = "PENDING";
+    }else{
+      r.statusSECURITY = "LOCKED";
+    }
+
+    DB.saveHostel(list);
     render();
+  }
+
+  applyBtn.onclick = render;
+
+  exportBtn.onclick = ()=>{
+    exportApprovedHostel(user, {
+      year: fYear.value.trim(),
+      program: fProgram.value.trim(),
+      section: fSection.value.trim()
+    });
   };
 
   render();

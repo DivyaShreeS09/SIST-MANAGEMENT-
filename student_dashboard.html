@@ -1,185 +1,240 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Student Dashboard</title>
-  <link rel="stylesheet" href="css/theme.css"/>
+  <link rel="stylesheet" href="./css/theme.css"/>
+  <script src="./js/app.js"></script>
+  <script src="./js/common.js"></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <div class="brand">
-        <img src="assets/logo.png" alt="SIST Logo">
-        <div>
-          <div class="brand-title">SIST MANAGEMENT SYSTEM</div>
-          <div class="brand-sub">Student Portal</div>
-        </div>
-      </div>
-      <div class="right">
-        <button class="btn btn-ghost btn-mini" data-theme-toggle>Dark mode</button>
-        <span class="chip">Logged in: <span data-who>-</span></span>
-        <button class="btn btn-primary btn-mini" data-signout>Sign Out</button>
+<div class="container">
+  <div class="topbar">
+    <div class="brand">
+      <img src="./assets/logo.png" alt="Logo">
+      <div class="title">
+        <b>SIST MANAGEMENT SYSTEM</b>
+        <span>Student Portal</span>
       </div>
     </div>
-  </header>
 
-  <div class="container">
-    <div class="card">
-      <div class="card-inner">
-        <div class="section-title">Student Dashboard</div>
-
-        <div class="grid3">
-          <div class="card">
-            <div class="card-inner">
-              <div class="badge">⚡ Quick Action</div>
-              <div style="height:10px"></div>
-              <button class="btn btn-primary" style="width:100%" onclick="location.href='student_od.html'">Request OD</button>
-              <div style="height:10px"></div>
-              <button class="btn btn-ghost" style="width:100%" onclick="location.href='student_lab.html'">Request Lab Access</button>
-            </div>
-          </div>
-
-          <div class="card" id="hostelQuick" style="display:none;">
-            <div class="card-inner">
-              <div class="badge">🏠 Hostel</div>
-              <div style="height:10px"></div>
-              <button class="btn btn-primary" style="width:100%" onclick="location.href='student_hostel.html'">Request Outpass</button>
-              <div style="height:10px"></div>
-              <div style="color:var(--muted);font-weight:900;font-size:12px;">
-                Visible only for hostel students.
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-inner">
-              <div class="badge">👤 Profile</div>
-              <div style="height:10px"></div>
-              <div style="font-weight:1000;">Register No: <span id="regNo"></span></div>
-              <div style="font-weight:900;color:var(--muted);margin-top:4px;" id="prog"></div>
-              <div style="font-weight:900;color:var(--muted);" id="sec"></div>
-            </div>
-          </div>
-        </div>
-
-        <div style="height:16px"></div>
-
-        <div class="grid2">
-          <div class="card">
-            <div class="card-inner">
-              <div class="card-title">Your OD History</div>
-              <div style="height:10px"></div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Reason</th>
-                      <th>From-To</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody id="odRows"></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-inner">
-              <div class="card-title">Your Lab Access History</div>
-              <div style="height:10px"></div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Lab</th>
-                      <th>From-To</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody id="labRows"></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style="height:16px"></div>
-
-        <div class="card" id="hostelHistoryCard" style="display:none;">
-          <div class="card-inner">
-            <div class="card-title">Your Hostel Outpass History</div>
-            <div style="height:10px"></div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Purpose</th>
-                    <th>From-To</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody id="hosRows"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-      </div>
+    <div class="actions">
+      <button class="btn btn-ghost" data-theme-toggle onclick="toggleTheme()">Dark mode</button>
+      <span class="pill" id="who"></span>
+      <button class="btn btn-primary" onclick="signOut()">Sign Out</button>
     </div>
   </div>
 
-  <div class="toast" id="toast"></div>
+  <div style="height:16px"></div>
 
-  <script src="js/common.js"></script>
-  <script src="js/app.js"></script>
-  <script>
-    initThemeToggle();
-    const sess = requireAuth(["STUDENT"]);
-    headerBind();
+  <div class="card">
+    <h2>Student Dashboard</h2>
 
-    document.getElementById("regNo").textContent = sess.username;
-    document.getElementById("prog").textContent = sess.program;
-    document.getElementById("sec").textContent = `Section: ${sess.section}`;
+    <div class="kpi-grid">
+      <div class="kpi">
+        <h3><span><span class="icon">⚡</span> Quick Actions</span></h3>
+        <div class="cta">
+          <button class="btn btn-primary" onclick="location.href='student_od.html'">Request OD</button>
+          <button class="btn btn-primary" onclick="location.href='student_lab.html'">Request Lab Access</button>
+        </div>
+      </div>
 
-    // hostel visibility
-    if(sess.hosteller){
-      document.getElementById("hostelQuick").style.display = "";
-      document.getElementById("hostelHistoryCard").style.display = "";
-    }
+      <div class="kpi" id="hostelCard" style="display:none;">
+        <h3><span><span class="icon">🏠</span> Hostel</span></h3>
+        <div class="cta">
+          <button class="btn btn-primary" onclick="location.href='student_hostel.html'">Request Outpass</button>
+        </div>
+        <div class="small" style="margin-top:10px;">Visible only for hostel students.</div>
+      </div>
 
-    // OD rows
-    const od = Store.od().filter(r=>r.studentId===sess.id);
-    document.getElementById("odRows").innerHTML = od.map(r=>`
+      <div class="kpi">
+        <h3><span><span class="icon">👤</span> Profile</span></h3>
+        <div class="profile-wrap">
+          <div class="avatar"><img id="avatarImg" alt="" style="display:none;"></div>
+          <div>
+            <div id="pReg" style="font-weight:800;"></div>
+            <div id="pProg" class="small"></div>
+            <div id="pSec" class="small"></div>
+          </div>
+        </div>
+
+        <div class="file-inline" style="margin-top:12px;">
+          <input type="file" id="avatarFile" accept="image/*">
+          <button class="btn btn-ghost" id="saveAvatarBtn" type="button">Save Photo</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hr"></div>
+
+    <!-- STACKED histories -->
+    <div class="card" style="box-shadow:none; background:transparent; border:none; padding:0;">
+      <h2 style="margin-top:0;">Your OD History</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Reason</th>
+              <th>From</th>
+              <th>To</th>
+              <th>CC</th>
+              <th>YC</th>
+              <th>HOD</th>
+              <th>PDF</th>
+            </tr>
+          </thead>
+          <tbody id="odBody"></tbody>
+        </table>
+      </div>
+
+      <div class="hr"></div>
+
+      <h2>Your Lab Access History</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Lab</th>
+              <th>Reason</th>
+              <th>From</th>
+              <th>To</th>
+              <th>Mentor</th>
+              <th>HOD</th>
+              <th>PDF</th>
+            </tr>
+          </thead>
+          <tbody id="labBody"></tbody>
+        </table>
+      </div>
+
+      <div class="hr" id="hostelDivider" style="display:none;"></div>
+
+      <div id="hostelHistoryWrap" style="display:none;">
+        <h2>Your Hostel Outpass History</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Purpose</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Chief</th>
+                <th>Warden</th>
+                <th>Security</th>
+                <th>PDF</th>
+              </tr>
+            </thead>
+            <tbody id="hostelBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const u = requireAuth();
+  updateThemeButtonText();
+
+  document.getElementById("who").textContent = `Logged in: ${u.name}`;
+
+  // Hostel visibility
+  if(u.hosteller){
+    document.getElementById("hostelCard").style.display = "";
+    document.getElementById("hostelHistoryWrap").style.display = "";
+    document.getElementById("hostelDivider").style.display = "";
+  }
+
+  // Profile info
+  document.getElementById("pReg").textContent = `Register No: ${u.username}`;
+  document.getElementById("pProg").textContent = u.program;
+  document.getElementById("pSec").textContent = `Section: ${u.section}`;
+
+  // Avatar load/save
+  const avatarKey = `sist_avatar_${u.id}`;
+  const avatarImg = document.getElementById("avatarImg");
+  const saved = localStorage.getItem(avatarKey);
+  if(saved){
+    avatarImg.src = saved;
+    avatarImg.style.display="block";
+  }
+
+  document.getElementById("saveAvatarBtn").onclick = ()=>{
+    const f = document.getElementById("avatarFile").files[0];
+    if(!f) return alert("Select a photo first.");
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      localStorage.setItem(avatarKey, reader.result);
+      avatarImg.src = reader.result;
+      avatarImg.style.display="block";
+      alert("Profile photo saved.");
+    };
+    reader.readAsDataURL(f);
+  };
+
+  // Render histories
+  const od = DB.od().filter(r=>r.studentId===u.id);
+  const lab = DB.lab().filter(r=>r.studentId===u.id);
+  const hostel = DB.hostel().filter(r=>r.studentId===u.id);
+
+  // OD
+  document.getElementById("odBody").innerHTML = od.length ? od.map(r=>{
+    const finalOk = deriveCCYC(r)==="APPROVED" && (r.statusHOD||"") === "APPROVED";
+    return `
       <tr>
-        <td><b>${r.reason}</b></td>
-        <td>${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}</td>
-        <td>${statusPill(r.finalStatus)}</td>
+        <td>${r.reason}</td>
+        <td>${formatDT(r.fromDate,r.fromTime)}</td>
+        <td>${formatDT(r.toDate,r.toTime)}</td>
+        <td>${badge(r.statusCC)}</td>
+        <td>${badge(r.statusYC)}</td>
+        <td>${badge(r.statusHOD)}</td>
+        <td>
+          ${finalOk ? `<button class="btn btn-ghost" onclick="downloadODLetter(${JSON.stringify(r).replaceAll('"','&quot;')})">Download</button>` : `<span class="small">—</span>`}
+        </td>
       </tr>
-    `).join("") || `<tr><td colspan="3" style="color:var(--muted);font-weight:900;">No OD requests yet.</td></tr>`;
+    `;
+  }).join("") : `<tr><td colspan="7">No OD requests yet.</td></tr>`;
 
-    // LAB rows
-    const lab = Store.lab().filter(r=>r.studentId===sess.id);
-    document.getElementById("labRows").innerHTML = lab.map(r=>`
+  // LAB
+  document.getElementById("labBody").innerHTML = lab.length ? lab.map(r=>{
+    const finalOk = (r.statusMENTOR||"") === "APPROVED" && (r.statusHOD||"") === "APPROVED";
+    return `
       <tr>
-        <td><b>${r.lab}</b></td>
-        <td>${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}</td>
-        <td>${statusPill(r.finalStatus)}</td>
+        <td>${r.lab}</td>
+        <td>${r.reason}</td>
+        <td>${formatDT(r.fromDate,r.fromTime)}</td>
+        <td>${formatDT(r.toDate,r.toTime)}</td>
+        <td>${badge(r.statusMENTOR)}</td>
+        <td>${badge(r.statusHOD)}</td>
+        <td>
+          ${finalOk ? `<button class="btn btn-ghost" onclick="downloadLabLetter(${JSON.stringify(r).replaceAll('"','&quot;')})">Download</button>` : `<span class="small">—</span>`}
+        </td>
       </tr>
-    `).join("") || `<tr><td colspan="3" style="color:var(--muted);font-weight:900;">No lab requests yet.</td></tr>`;
+    `;
+  }).join("") : `<tr><td colspan="7">No lab requests yet.</td></tr>`;
 
-    // Hostel rows
-    const hos = Store.hostel().filter(r=>r.studentId===sess.id);
-    if(sess.hosteller){
-      document.getElementById("hosRows").innerHTML = hos.map(r=>`
+  // HOSTEL
+  if(u.hosteller){
+    document.getElementById("hostelBody").innerHTML = hostel.length ? hostel.map(r=>{
+      const finalOk = (r.statusCHIEF||"") === "APPROVED" && (r.statusWARDEN||"") === "APPROVED" && (r.statusSECURITY||"") === "APPROVED";
+      return `
         <tr>
-          <td><b>${r.purpose}</b></td>
-          <td>${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}</td>
-          <td>${statusPill(r.finalStatus)}</td>
+          <td>${r.purpose}</td>
+          <td>${formatDT(r.fromDate,r.fromTime)}</td>
+          <td>${formatDT(r.toDate,r.toTime)}</td>
+          <td>${badge(r.statusCHIEF)}</td>
+          <td>${badge(r.statusWARDEN)}</td>
+          <td>${badge(r.statusSECURITY)}</td>
+          <td>
+            ${finalOk ? `<button class="btn btn-ghost" onclick="downloadHostelLetter(${JSON.stringify(r).replaceAll('"','&quot;')})">Download</button>` : `<span class="small">—</span>`}
+          </td>
         </tr>
-      `).join("") || `<tr><td colspan="3" style="color:var(--muted);font-weight:900;">No outpass requests yet.</td></tr>`;
-    }
-  </script>
+      `;
+    }).join("") : `<tr><td colspan="7">No outpass requests yet.</td></tr>`;
+  }
+</script>
 </body>
 </html>

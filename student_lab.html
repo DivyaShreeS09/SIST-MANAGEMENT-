@@ -1,179 +1,178 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Lab Access - Student</title>
-  <link rel="stylesheet" href="css/theme.css"/>
+  <link rel="stylesheet" href="./css/theme.css"/>
+  <script src="./js/app.js"></script>
+  <script src="./js/common.js"></script>
 </head>
 <body>
-<header class="topbar">
-  <div class="topbar-inner">
+<div class="container">
+  <div class="topbar">
     <div class="brand">
-      <img src="assets/logo.png" alt="SIST Logo">
-      <div>
-        <div class="brand-title">SIST MANAGEMENT SYSTEM</div>
-        <div class="brand-sub">Lab Access Request</div>
+      <img src="./assets/logo.png" alt="Logo">
+      <div class="title">
+        <b>SIST MANAGEMENT SYSTEM</b>
+        <span>Lab Access Request</span>
       </div>
     </div>
-    <div class="right">
-      <button class="btn btn-ghost btn-mini" data-theme-toggle>Dark mode</button>
-      <span class="chip">Logged in: <span data-who>-</span></span>
-      <button class="btn btn-primary btn-mini" onclick="location.href='student_dashboard.html'">Dashboard</button>
-      <button class="btn btn-primary btn-mini" data-signout>Sign Out</button>
+
+    <div class="actions">
+      <button class="btn btn-ghost" data-theme-toggle onclick="toggleTheme()">Dark mode</button>
+      <span class="pill" id="who"></span>
+      <button class="btn btn-ghost" onclick="location.href='student_dashboard.html'">Dashboard</button>
+      <button class="btn btn-primary" onclick="signOut()">Sign Out</button>
     </div>
   </div>
-</header>
 
-<div class="container">
+  <div style="height:16px"></div>
+
   <div class="card">
-    <div class="card-inner">
-      <div class="section-title">Lab Access Request</div>
-
-      <div class="grid2">
+    <h2>Lab Access Request</h2>
+    <form id="labForm">
+      <div class="grid-2">
         <div>
-          <label>Register No (auto)</label>
-          <input id="regNo" disabled>
+          <label>Register No</label>
+          <input id="regNo" required>
         </div>
         <div>
-          <label>Name (auto)</label>
-          <input id="name" disabled>
-        </div>
-      </div>
-
-      <div class="grid2" style="margin-top:12px;">
-        <div>
-          <label>Program (auto)</label>
-          <input id="program" disabled>
+          <label>Name</label>
+          <input id="name" required>
         </div>
         <div>
-          <label>Section (auto)</label>
-          <input id="section" disabled>
+          <label>Program</label>
+          <input id="program" required>
+        </div>
+        <div>
+          <label>Section</label>
+          <input id="section" required>
         </div>
       </div>
 
-      <div style="height:12px"></div>
-
-      <div class="grid2">
+      <div class="grid-2">
         <div>
           <label>Lab</label>
-          <input id="lab" placeholder="e.g., AI Lab - SCAS">
+          <input id="lab" required placeholder="e.g., AI Lab - SCAS">
         </div>
         <div>
           <label>Reason</label>
-          <input id="reason" placeholder="e.g., Project work / Assignment / Practical">
+          <input id="reason" required placeholder="e.g., Project / Assignment / Practical">
         </div>
       </div>
 
-      <div style="height:12px"></div>
-
-      <div class="grid2">
+      <div class="form-row">
         <div>
           <label>From Date</label>
-          <input id="fromDate" type="date">
+          <input type="date" id="fromDate" required>
         </div>
         <div>
           <label>To Date</label>
-          <input id="toDate" type="date">
+          <input type="date" id="toDate" required>
         </div>
       </div>
 
-      <div class="grid2" style="margin-top:12px;">
+      <div class="form-row">
         <div>
           <label>From Time</label>
-          <input id="fromTime" type="time">
+          <input type="time" id="fromTime" required>
         </div>
         <div>
           <label>To Time</label>
-          <input id="toTime" type="time">
+          <input type="time" id="toTime" required>
         </div>
       </div>
-
-      <div style="height:12px"></div>
 
       <label>Upload Proof (Letter / Approval / Instruction)</label>
-      <input id="proof" type="file" accept=".pdf,.jpg,.jpeg,.png">
+      <input type="file" id="proof" required>
 
-      <div style="height:14px"></div>
-      <button class="btn btn-primary" style="width:100%" id="submitBtn">Submit Lab Request</button>
-
-      <div style="height:18px"></div>
-
-      <div class="card">
-        <div class="card-inner">
-          <div class="card-title">Your Lab Access History</div>
-          <div style="height:10px"></div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Lab</th>
-                  <th>Reason</th>
-                  <th>From-To</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody id="rows"></tbody>
-            </table>
-          </div>
-        </div>
+      <div style="margin-top:14px;">
+        <button class="btn btn-primary" style="width:100%;">Submit Lab Request</button>
       </div>
+    </form>
 
+    <div class="hr"></div>
+
+    <h2>Your Lab Access History</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Lab</th>
+            <th>Reason</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Mentor</th>
+            <th>HOD</th>
+            <th>PDF</th>
+          </tr>
+        </thead>
+        <tbody id="labBody"></tbody>
+      </table>
     </div>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
-
-<script src="js/common.js"></script>
-<script src="js/app.js"></script>
 <script>
-  initThemeToggle();
-  const sess = requireAuth(["STUDENT"]);
-  headerBind();
+  const u = requireAuth();
+  updateThemeButtonText();
+  document.getElementById("who").textContent = `Logged in: ${u.name}`;
 
-  document.getElementById("regNo").value = sess.username;
-  document.getElementById("name").value = sess.name;
-  document.getElementById("program").value = sess.program;
-  document.getElementById("section").value = sess.section;
+  // Autofill (still required)
+  regNo.value = u.username;
+  name.value = u.name;
+  program.value = u.program;
+  section.value = u.section;
 
   function render(){
-    const list = Store.lab().filter(r=>r.studentId===sess.id);
-    document.getElementById("rows").innerHTML = list.map(r=>`
-      <tr>
-        <td><b>${r.lab}</b></td>
-        <td>${r.reason}</td>
-        <td>${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}</td>
-        <td>${statusPill(r.finalStatus)}</td>
-      </tr>
-    `).join("") || `<tr><td colspan="4" style="color:var(--muted);font-weight:900;">No lab requests yet.</td></tr>`;
+    const list = DB.lab().filter(r=>r.studentId===u.id);
+    labBody.innerHTML = list.length ? list.map(r=>{
+      const finalOk = (r.statusMENTOR||"") === "APPROVED" && (r.statusHOD||"") === "APPROVED";
+      return `
+        <tr>
+          <td>${r.lab}</td>
+          <td>${r.reason}</td>
+          <td>${formatDT(r.fromDate,r.fromTime)}</td>
+          <td>${formatDT(r.toDate,r.toTime)}</td>
+          <td>${badge(r.statusMENTOR)}</td>
+          <td>${badge(r.statusHOD)}</td>
+          <td>${finalOk ? `<button class="btn btn-ghost" onclick="downloadLabLetter(${JSON.stringify(r).replaceAll('"','&quot;')})">Download</button>` : `<span class="small">—</span>`}</td>
+        </tr>
+      `;
+    }).join("") : `<tr><td colspan="7">No lab requests yet.</td></tr>`;
   }
   render();
 
-  document.getElementById("submitBtn").addEventListener("click", ()=>{
-    const lab = document.getElementById("lab").value.trim();
-    const reason = document.getElementById("reason").value.trim();
-    const fromDate = document.getElementById("fromDate").value;
-    const toDate = document.getElementById("toDate").value;
-    const fromTime = document.getElementById("fromTime").value;
-    const toTime = document.getElementById("toTime").value;
-    const proof = document.getElementById("proof").files[0];
+  labForm.addEventListener("submit",(e)=>{
+    e.preventDefault();
+    const f = proof.files[0];
+    if(!f) return alert("Proof file is required.");
 
-    if(!lab || !reason || !fromDate || !toDate || !fromTime || !toTime){
-      toast("Fill all mandatory fields");
-      return;
-    }
+    const labReq = DB.lab();
+    labReq.unshift({
+      id:"lab"+Date.now(), studentId:u.id,
+      regNo: regNo.value.trim(),
+      studentName: name.value.trim(),
+      program: program.value.trim(),
+      section: section.value.trim(),
+      year: u.year, dept: u.dept,
+      lab: lab.value.trim(),
+      reason: reason.value.trim(),
+      fromDate: fromDate.value, toDate: toDate.value,
+      fromTime: fromTime.value, toTime: toTime.value,
+      proofName: f.name,
 
-    window.createLAB(sess, {
-      lab, reason, fromDate, toDate, fromTime, toTime,
-      proofName: proof ? proof.name : ""
+      statusMENTOR:"PENDING", mentorBy:null,
+      statusHOD:"PENDING", hodBy:null,
+      timeline:[{at:new Date().toISOString(), by:u.name, action:"CREATED"}]
     });
 
-    toast("Lab request submitted");
-    document.getElementById("lab").value = "";
-    document.getElementById("reason").value = "";
-    document.getElementById("proof").value = "";
+    DB.saveLab(labReq);
+    labForm.reset();
+    regNo.value=u.username; name.value=u.name; program.value=u.program; section.value=u.section;
     render();
+    alert("Lab request submitted.");
   });
 </script>
 </body>

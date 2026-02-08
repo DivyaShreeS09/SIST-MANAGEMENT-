@@ -1,139 +1,157 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>OD - Year Coordinator</title>
-  <link rel="stylesheet" href="css/theme.css"/>
+  <link rel="stylesheet" href="./css/theme.css"/>
+  <script src="./js/app.js"></script>
+  <script src="./js/common.js"></script>
 </head>
 <body>
-<header class="topbar">
-  <div class="topbar-inner">
+<div class="container">
+  <div class="topbar">
     <div class="brand">
-      <img src="assets/logo.png" alt="SIST Logo">
-      <div>
-        <div class="brand-title">SIST MANAGEMENT SYSTEM</div>
-        <div class="brand-sub">OD Approval - Year Coordinator</div>
+      <img src="./assets/logo.png" alt="Logo">
+      <div class="title">
+        <b>SIST MANAGEMENT SYSTEM</b>
+        <span>OD Approval - Year Coordinator</span>
       </div>
     </div>
-    <div class="right">
-      <button class="btn btn-ghost btn-mini" data-theme-toggle>Dark mode</button>
-      <span class="chip"><span data-role>-</span> | <span data-who>-</span></span>
-      <button class="btn btn-primary btn-mini" data-signout>Sign Out</button>
+
+    <div class="actions">
+      <button class="btn btn-ghost" data-theme-toggle onclick="toggleTheme()">Dark mode</button>
+      <span class="pill">YEAR COORDINATOR | Year Coordinator</span>
+      <button class="btn btn-primary" onclick="signOut()">Sign Out</button>
     </div>
   </div>
-</header>
 
-<div class="container">
+  <div style="height:16px"></div>
+
   <div class="card">
-    <div class="card-inner">
-      <div class="section-title">OD Approval Dashboard</div>
+    <h2>OD Approval Dashboard</h2>
 
-      <div class="grid3">
-        <div>
-          <label>Filter by Program</label>
-          <input id="fProgram" placeholder="e.g., B.E CSE AIML">
-        </div>
-        <div>
-          <label>Filter by Section</label>
-          <input id="fSection" placeholder="e.g., A1 / A2">
-        </div>
-        <div style="display:flex;gap:10px;align-items:end;">
-          <button class="btn btn-ghost" style="width:100%" id="applyBtn">Apply</button>
-          <button class="btn btn-primary" style="width:100%" id="pdfBtn">Export PDF</button>
-        </div>
+    <div class="grid-2">
+      <div>
+        <label>Filter by Program</label>
+        <input id="fProgram" placeholder="e.g., B.E CSE AIML">
       </div>
-
-      <div style="height:14px"></div>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Register No</th>
-              <th>Name</th>
-              <th>Program</th>
-              <th>Section</th>
-              <th>Reason</th>
-              <th>From-To</th>
-              <th>Proof</th>
-              <th>CC/YC</th>
-              <th>HOD</th>
-              <th>Final</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
+      <div>
+        <label>Filter by Section</label>
+        <input id="fSection" placeholder="e.g., A1/A2">
       </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>Filter by Year</label>
+        <input id="fYear" placeholder="e.g., 3">
+      </div>
+      <div style="display:flex; gap:10px; align-items:flex-end;">
+        <button class="btn btn-ghost" id="applyBtn" type="button">Apply</button>
+        <button class="btn btn-primary" id="exportBtn" type="button">Export Approved List (PDF)</button>
+      </div>
+    </div>
 
+    <div class="hr"></div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Reg No</th>
+            <th>Name</th>
+            <th>Program</th>
+            <th>Section</th>
+            <th>Reason</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Proof</th>
+            <th>CC</th>
+            <th>YC</th>
+            <th>HOD</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="body"></tbody>
+      </table>
     </div>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
-
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.29/dist/jspdf.plugin.autotable.min.js"></script>
-<script src="js/common.js"></script>
-<script src="js/app.js"></script>
-
 <script>
-  initThemeToggle();
-  const sess = requireAuth(["YEAR_COORDINATOR"]);
-  headerBind();
+  const user = requireAuth();
+  updateThemeButtonText();
+  if(user.role !== "YEAR_COORDINATOR"){ alert("Unauthorized"); location.href="login.html"; }
 
-  function getFiltered(){
-    const prog = document.getElementById("fProgram").value.trim().toLowerCase();
-    const sec = document.getElementById("fSection").value.trim().toLowerCase();
-    const scoped = scopeODForApprover(sess, Store.od());
+  function matchesFilters(r){
+    const yp = fProgram.value.trim().toLowerCase();
+    const ys = fSection.value.trim().toLowerCase();
+    const yy = fYear.value.trim();
 
-    return scoped.filter(r=>{
-      const okP = !prog || (r.program||"").toLowerCase().includes(prog);
-      const okS = !sec || (r.section||"").toLowerCase().includes(sec);
-      return okP && okS;
-    });
+    const okP = !yp || (r.program||"").toLowerCase().includes(yp);
+    const okS = !ys || (r.section||"").toLowerCase().includes(ys);
+    const okY = !yy || String(r.year) === String(yy);
+    return okP && okS && okY;
   }
 
   function render(){
-    const list = getFiltered();
-    document.getElementById("rows").innerHTML = list.map(r=>`
-      <tr>
-        <td><b>${r.regNo}</b></td>
-        <td>${r.studentName}</td>
-        <td>${r.program}</td>
-        <td>${r.section}</td>
-        <td>${r.reason}</td>
-        <td>${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}</td>
-        <td>${r.proofName || "-"}</td>
-        <td>${statusPill(r.statusCCYC)}</td>
-        <td>${statusPill(r.statusHOD)}</td>
-        <td>${statusPill(r.finalStatus)}</td>
-        <td style="display:flex;gap:8px;">
-          <button class="btn btn-primary btn-mini" ${r.statusCCYC!=="PENDING"?"disabled":""} onclick="act('APPROVED','${r.id}')">Approve</button>
-          <button class="btn btn-danger btn-mini" ${r.statusCCYC!=="PENDING"?"disabled":""} onclick="act('REJECTED','${r.id}')">Reject</button>
-        </td>
-      </tr>
-    `).join("") || `<tr><td colspan="11" style="color:var(--muted);font-weight:900;">No OD requests in scope.</td></tr>`;
+    const users = DB.users();
+    let list = DB.od();
+
+    list = list.filter(r=>{
+      const stu = users.find(x=>x.id===r.studentId);
+      return stu && visibleToApprover(user, stu);
+    }).filter(matchesFilters);
+
+    body.innerHTML = list.length ? list.map(r=>{
+      const ccyc = deriveCCYC(r);
+      // YC must still be able even if CC already approved; reject must be possible
+      const actionHtml = (r.statusYC==="PENDING" && r.statusHOD!=="APPROVED" && ccyc!=="REJECTED")
+        ? `<button class="btn btn-success" onclick="act('${r.id}','APPROVED')">Approve</button>
+           <button class="btn btn-danger" onclick="act('${r.id}','REJECTED')">Reject</button>`
+        : `<span class="small">—</span>`;
+
+      return `
+        <tr>
+          <td>${r.regNo}</td>
+          <td>${r.studentName}</td>
+          <td>${r.program}</td>
+          <td>${r.section}</td>
+          <td>${r.reason}</td>
+          <td>${formatDT(r.fromDate,r.fromTime)}</td>
+          <td>${formatDT(r.toDate,r.toTime)}</td>
+          <td>${r.proofName || "-"}</td>
+          <td>${badge(r.statusCC)}</td>
+          <td>${badge(r.statusYC)}</td>
+          <td>${badge(r.statusHOD)}</td>
+          <td style="display:flex; gap:8px; flex-wrap:wrap;">${actionHtml}</td>
+        </tr>
+      `;
+    }).join("") : `<tr><td colspan="12">No requests found.</td></tr>`;
   }
 
-  window.act = function(decision, id){
-    window.actOD_CCYC(sess, id, decision);
-    toast("Updated");
+  function act(id, status){
+    const list = DB.od();
+    const r = list.find(x=>x.id===id);
+    if(!r) return;
+
+    r.statusYC = status;
+    r.ycBy = user.id;
+    r.timeline = r.timeline || [];
+    r.timeline.unshift({at:new Date().toISOString(), by:user.name, action:`YC_${status}`});
+
+    DB.saveOD(list);
     render();
-  };
+  }
 
-  document.getElementById("applyBtn").onclick = render;
+  applyBtn.onclick = render;
 
-  document.getElementById("pdfBtn").onclick = ()=>{
-    const list = getFiltered().filter(r=>r.finalStatus==="APPROVED");
-    const headers = ["RegNo","Name","Program","Section","Reason","From-To","Approved By (CC/YC)","HOD","Final"];
-    const rows = list.map(r=>[
-      r.regNo, r.studentName, r.program, r.section, r.reason,
-      `${r.fromDate} ${r.fromTime} → ${r.toDate} ${r.toTime}`,
-      r.ccOrYcBy || "-", r.hodBy || "-", r.finalStatus
-    ]);
-    exportPdfFromRows("OD Approved List (YC Scope)", headers, rows);
+  exportBtn.onclick = ()=>{
+    exportApprovedOD(user, {
+      year: fYear.value.trim(),
+      program: fProgram.value.trim(),
+      section: fSection.value.trim()
+    });
   };
 
   render();

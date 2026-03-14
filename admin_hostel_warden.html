@@ -1,18 +1,19 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Hostel - Warden</title>
-  <link rel="stylesheet" href="./css/theme.css"/>
-  <script src="./js/app.js"></script>
-  <script src="./js/common.js"></script>
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}"/>
+  <script src="{% static 'js/app.js' %}"></script>
+  <script src="{% static 'js/common.js' %}"></script>
 </head>
 <body>
 <div class="container">
   <div class="topbar">
     <div class="brand">
-      <img src="./assets/logo.png" alt="Logo">
+      <img src="{% static 'assets/logo.png' %}" alt="Logo">
       <div class="title">
         <b>SIST MANAGEMENT SYSTEM</b>
         <span>Hostel Approval - Warden</span>
@@ -109,25 +110,36 @@
     }).join("") : `<tr><td colspan="12">No requests found.</td></tr>`;
   }
 
-  function act(id, status){
-    const list = DB.hostel();
-    const r = list.find(x=>x.id===id);
-    if(!r) return;
+  async function act(id,status){
 
-    r.statusWARDEN = status;
-    r.wardenBy = user.id;
-    r.timeline = r.timeline || [];
-    r.timeline.unshift({at:new Date().toISOString(), by:user.name, action:`WARDEN_${status}`});
+  const res = await fetch("/api/hostel/warden-action/",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({
+      request_id:id,
+      action:status,
+      approver_id:user.id
+    })
+  });
 
-    if(status==="APPROVED"){
-      r.statusSECURITY = "PENDING";
-    }else{
-      r.statusSECURITY = "LOCKED";
-    }
+  const data = await res.json();
 
-    DB.saveHostel(list);
-    render();
+  if(!res.ok){
+    alert(data.error);
+    return;
   }
+
+  const list = DB.hostel();
+  const r = list.find(x=>String(x.id)===String(id));
+
+  if(r){
+    r.statusWARDEN=status;
+    if(status==="APPROVED") r.statusSECURITY="PENDING";
+    DB.saveHostel(list);
+  }
+
+  render();
+}
 
   applyBtn.onclick = render;
 

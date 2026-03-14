@@ -1,18 +1,19 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Lab - Year Coordinator</title>
-  <link rel="stylesheet" href="./css/theme.css"/>
-  <script src="./js/app.js"></script>
-  <script src="./js/common.js"></script>
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}"/>
+  <script src="{% static 'js/app.js' %}"></script>
+  <script src="{% static 'js/common.js' %}"></script>
 </head>
 <body>
 <div class="container">
   <div class="topbar">
     <div class="brand">
-      <img src="./assets/logo.png" alt="Logo">
+      <img src="{% static 'assets/logo.png' %}" alt="Logo">
       <div class="title">
         <b>SIST MANAGEMENT SYSTEM</b>
         <span>Lab Approval - Year Coordinator</span>

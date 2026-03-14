@@ -1,119 +1,160 @@
 // common.js - auth, theme, rendering helpers, approvals, exports
 
-(function(){
-  // Apply theme ASAP
+(function () {
   const theme = localStorage.getItem("sist_theme") || "light";
   document.documentElement.setAttribute("data-theme", theme);
 })();
 
 const DB = {
-  users: () => JSON.parse(localStorage.getItem("sist_users")||"[]"),
-  od: () => JSON.parse(localStorage.getItem("sist_od")||"[]"),
-  lab: () => JSON.parse(localStorage.getItem("sist_lab")||"[]"),
-  hostel: () => JSON.parse(localStorage.getItem("sist_hostel")||"[]"),
+  users: () => JSON.parse(localStorage.getItem("sist_users") || "[]"),
+  od: () => JSON.parse(localStorage.getItem("sist_od") || "[]"),
+  lab: () => JSON.parse(localStorage.getItem("sist_lab") || "[]"),
+  hostel: () => JSON.parse(localStorage.getItem("sist_hostel") || "[]"),
 
-  saveOD: (arr)=> localStorage.setItem("sist_od", JSON.stringify(arr)),
-  saveLab:(arr)=> localStorage.setItem("sist_lab", JSON.stringify(arr)),
-  saveHostel:(arr)=> localStorage.setItem("sist_hostel", JSON.stringify(arr)),
+  saveOD: (arr) => localStorage.setItem("sist_od", JSON.stringify(arr)),
+  saveLab: (arr) => localStorage.setItem("sist_lab", JSON.stringify(arr)),
+  saveHostel: (arr) => localStorage.setItem("sist_hostel", JSON.stringify(arr)),
 };
 
-function setTheme(next){
+function setTheme(next) {
   localStorage.setItem("sist_theme", next);
   document.documentElement.setAttribute("data-theme", next);
   updateThemeButtonText();
 }
 
-function toggleTheme(){
+function toggleTheme() {
   const cur = localStorage.getItem("sist_theme") || "light";
   setTheme(cur === "light" ? "dark" : "light");
 }
 
-function updateThemeButtonText(){
+function updateThemeButtonText() {
   const cur = localStorage.getItem("sist_theme") || "light";
   const btn = document.querySelector("[data-theme-toggle]");
-  if(btn){
+  if (btn) {
     btn.textContent = cur === "light" ? "Dark mode" : "Light mode";
   }
 }
 
-function session(){
-  try { return JSON.parse(localStorage.getItem("sist_session")||"null"); } catch { return null; }
+function session() {
+  try {
+    return JSON.parse(localStorage.getItem("sist_session") || "null");
+  } catch {
+    return null;
+  }
 }
 
-function currentUser(){
-  const s = session();
-  if(!s) return null;
-  return DB.users().find(u => u.id === s.userId) || null;
+function currentUser() {
+  try {
+    const raw = localStorage.getItem("sist_current_user");
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
-function requireAuth(){
-  const u = currentUser();
-  if(!u){
+function requireAuth() {
+  const rawSession = localStorage.getItem("sist_session");
+  const rawCurrentUser = localStorage.getItem("sist_current_user");
+
+  if (!rawSession || !rawCurrentUser) {
     window.location.href = "login.html";
     return null;
   }
-  return u;
+
+  try {
+    const sess = JSON.parse(rawSession);
+    const user = JSON.parse(rawCurrentUser);
+
+    if (!sess || !user || !sess.userId || !user.id) {
+      localStorage.removeItem("sist_session");
+      localStorage.removeItem("sist_current_user");
+      window.location.href = "login.html";
+      return null;
+    }
+
+    if (String(sess.userId) !== String(user.id)) {
+      localStorage.removeItem("sist_session");
+      localStorage.removeItem("sist_current_user");
+      window.location.href = "login.html";
+      return null;
+    }
+
+    return user;
+  } catch (err) {
+    console.error("Session parse error:", err);
+    localStorage.removeItem("sist_session");
+    localStorage.removeItem("sist_current_user");
+    window.location.href = "login.html";
+    return null;
+  }
 }
 
-function signOut(){
+function signOut() {
   localStorage.removeItem("sist_session");
+  localStorage.removeItem("sist_current_user");
   window.location.href = "login.html";
 }
 
-function statusClass(status){
-  const s = (status||"").toUpperCase();
-  if(s === "APPROVED") return "approved";
-  if(s === "REJECTED") return "rejected";
-  if(s === "LOCKED") return "locked";
+function statusClass(status) {
+  const s = (status || "").toUpperCase();
+  if (s === "APPROVED") return "approved";
+  if (s === "REJECTED") return "rejected";
+  if (s === "LOCKED") return "locked";
   return "pending";
 }
 
-function badge(status){
-  const s = (status||"PENDING").toUpperCase();
+function badge(status) {
+  const s = (status || "PENDING").toUpperCase();
   return `<span class="badge ${statusClass(s)}">${s}</span>`;
 }
 
-function formatDT(date, time){
+function formatDT(date, time) {
   const d = date || "-";
   const t = time || "-";
   return `${d} ${t}`;
 }
 
 // CC/YC derived status rule: reject wins, else any approved wins, else pending
-function deriveCCYC(rec){
-  const a = (rec.statusCC||"PENDING").toUpperCase();
-  const b = (rec.statusYC||"PENDING").toUpperCase();
-  if(a==="REJECTED" || b==="REJECTED") return "REJECTED";
-  if(a==="APPROVED" || b==="APPROVED") return "APPROVED";
+function deriveCCYC(rec) {
+  const a = (rec.statusCC || "PENDING").toUpperCase();
+  const b = (rec.statusYC || "PENDING").toUpperCase();
+  if (a === "REJECTED" || b === "REJECTED") return "REJECTED";
+  if (a === "APPROVED" || b === "APPROVED") return "APPROVED";
   return "PENDING";
 }
 
-function canHodApproveOD(rec){
+function canHodApproveOD(rec) {
   const ccyc = deriveCCYC(rec);
-  return ccyc === "APPROVED" && (rec.statusHOD||"PENDING") === "PENDING";
+  return ccyc === "APPROVED" && (rec.statusHOD || "PENDING") === "PENDING";
 }
 
-function visibleToApprover(user, student){
-  // Approvers must only see their scope
-  if(user.role === "CLASS_COORDINATOR"){
+function visibleToApprover(user, student) {
+  if (user.role === "CLASS_COORDINATOR") {
     return student.program === user.program && student.section === user.section && student.year === user.year;
   }
-  if(user.role === "YEAR_COORDINATOR"){
+  if (user.role === "YEAR_COORDINATOR") {
     return student.program === user.program && student.year === user.year;
   }
-  if(user.role === "HOD"){
-    return student.dept === user.dept;
+  if (user.role === "HOD") {
+    return student.dept === user.dept || student.department === user.department;
   }
-  // hostel roles see hostellers only in their scope (keep simple)
   return true;
 }
 
-function findUserNameById(id){
-  const u = DB.users().find(x => x.id === id);
-  return u ? u.name : "—";
+function findUserNameById(id) {
+  const u = DB.users().find(x => String(x.id) === String(id));
+  if (u) return u.name || u.full_name || u.username || "—";
+
+  const current = currentUser();
+  if (current && String(current.id) === String(id)) {
+    return current.name || current.full_name || current.username || "—";
+  }
+
+  return "—";
 }
 
-function printHTML(title, html){
+function printHTML(title, html) {
   const w = window.open("", "_blank");
   w.document.write(`
   <html>
@@ -142,10 +183,9 @@ function printHTML(title, html){
 }
 
 // ---- Student approval letter PDFs (print-to-pdf) ----
-function downloadODLetter(rec){
-  const ccycNames = [];
-  if(rec.ccBy) ccycNames.push(findUserNameById(rec.ccBy));
-  if(rec.ycBy) ccycNames.push(findUserNameById(rec.ycBy));
+function downloadODLetter(rec) {
+  const ccName = rec.ccBy ? findUserNameById(rec.ccBy) : "—";
+  const ycName = rec.ycBy ? findUserNameById(rec.ycBy) : "—";
   const hodName = rec.hodBy ? findUserNameById(rec.hodBy) : "—";
 
   const html = `
@@ -165,16 +205,18 @@ function downloadODLetter(rec){
     </table>
 
     <div class="sig">
-      <div><b>CC/YC Approved By:</b><br/>${ccycNames.length ? ccycNames.join(", ") : "—"}</div>
+      <div><b>CC Approved By:</b><br/>${ccName}</div>
+      <div><b>YC Approved By:</b><br/>${ycName}</div>
       <div><b>HOD Approved By:</b><br/>${hodName}</div>
     </div>
   `;
   printHTML("OD Approval Letter", html);
 }
 
-function downloadLabLetter(rec){
+function downloadLabLetter(rec) {
   const mentorName = rec.mentorBy ? findUserNameById(rec.mentorBy) : "—";
   const hodName = rec.hodBy ? findUserNameById(rec.hodBy) : "—";
+
   const html = `
     <h1>SIST MANAGEMENT SYSTEM — Lab Access Approval Letter</h1>
     <div class="muted">Digitally generated. Save as PDF.</div>
@@ -199,7 +241,7 @@ function downloadLabLetter(rec){
   printHTML("Lab Access Approval Letter", html);
 }
 
-function downloadHostelLetter(rec){
+function downloadHostelLetter(rec) {
   const chief = rec.chiefBy ? findUserNameById(rec.chiefBy) : "—";
   const warden = rec.wardenBy ? findUserNameById(rec.wardenBy) : "—";
   const security = rec.securityBy ? findUserNameById(rec.securityBy) : "—";
@@ -229,31 +271,31 @@ function downloadHostelLetter(rec){
 }
 
 // ---- Admin exports ----
-function exportApprovedOD(user, filters){
+function exportApprovedOD(user, filters) {
   const users = DB.users();
   const od = DB.od();
 
   const approved = od
-    .filter(r => (r.statusHOD||"") === "APPROVED" && deriveCCYC(r)==="APPROVED")
+    .filter(r => (r.statusHOD || "") === "APPROVED" && deriveCCYC(r) === "APPROVED")
     .filter(r => {
-      const stu = users.find(x => x.id === r.studentId);
-      return stu && visibleToApprover(user, stu);
+      const stu = users.find(x => String(x.id) === String(r.studentId));
+      return !stu ? true : visibleToApprover(user, stu);
     })
     .filter(r => {
       const okYear = !filters.year || String(r.year) === String(filters.year);
-      const okProg = !filters.program || (r.program||"").toLowerCase().includes(filters.program.toLowerCase());
-      const okSec  = !filters.section || (r.section||"").toLowerCase().includes(filters.section.toLowerCase());
+      const okProg = !filters.program || (r.program || "").toLowerCase().includes(filters.program.toLowerCase());
+      const okSec = !filters.section || (r.section || "").toLowerCase().includes(filters.section.toLowerCase());
       return okYear && okProg && okSec;
     });
 
-  const rows = approved.map(r=>`
+  const rows = approved.map(r => `
     <tr>
       <td>${r.regNo}</td><td>${r.studentName}</td><td>${r.program}</td><td>${r.section}</td>
       <td>${r.reason}</td>
-      <td>${formatDT(r.fromDate,r.fromTime)}</td>
-      <td>${formatDT(r.toDate,r.toTime)}</td>
-      <td>${(r.ccBy?findUserNameById(r.ccBy):"")}${(r.ycBy?(", "+findUserNameById(r.ycBy)):"")}</td>
-      <td>${r.hodBy?findUserNameById(r.hodBy):""}</td>
+      <td>${formatDT(r.fromDate, r.fromTime)}</td>
+      <td>${formatDT(r.toDate, r.toTime)}</td>
+      <td>${(r.ccBy ? findUserNameById(r.ccBy) : "")}${(r.ycBy ? (", " + findUserNameById(r.ycBy)) : "")}</td>
+      <td>${r.hodBy ? findUserNameById(r.hodBy) : ""}</td>
     </tr>
   `).join("");
 
@@ -271,30 +313,30 @@ function exportApprovedOD(user, filters){
   printHTML("Approved OD List", html);
 }
 
-function exportApprovedLab(user, filters){
+function exportApprovedLab(user, filters) {
   const users = DB.users();
   const lab = DB.lab();
 
   const approved = lab
-    .filter(r => (r.statusHOD||"") === "APPROVED" && (r.statusMENTOR||"") === "APPROVED")
+    .filter(r => (r.statusHOD || "") === "APPROVED" && (r.statusMENTOR || "") === "APPROVED")
     .filter(r => {
-      const stu = users.find(x => x.id === r.studentId);
-      return stu && visibleToApprover(user, stu);
+      const stu = users.find(x => String(x.id) === String(r.studentId));
+      return !stu ? true : visibleToApprover(user, stu);
     })
     .filter(r => {
       const okYear = !filters.year || String(r.year) === String(filters.year);
-      const okProg = !filters.program || (r.program||"").toLowerCase().includes(filters.program.toLowerCase());
-      const okSec  = !filters.section || (r.section||"").toLowerCase().includes(filters.section.toLowerCase());
+      const okProg = !filters.program || (r.program || "").toLowerCase().includes(filters.program.toLowerCase());
+      const okSec = !filters.section || (r.section || "").toLowerCase().includes(filters.section.toLowerCase());
       return okYear && okProg && okSec;
     });
 
-  const rows = approved.map(r=>`
+  const rows = approved.map(r => `
     <tr>
       <td>${r.regNo}</td><td>${r.studentName}</td><td>${r.program}</td><td>${r.section}</td>
       <td>${r.lab}</td><td>${r.reason}</td>
-      <td>${formatDT(r.fromDate,r.fromTime)}</td><td>${formatDT(r.toDate,r.toTime)}</td>
-      <td>${r.mentorBy?findUserNameById(r.mentorBy):""}</td>
-      <td>${r.hodBy?findUserNameById(r.hodBy):""}</td>
+      <td>${formatDT(r.fromDate, r.fromTime)}</td><td>${formatDT(r.toDate, r.toTime)}</td>
+      <td>${r.mentorBy ? findUserNameById(r.mentorBy) : ""}</td>
+      <td>${r.hodBy ? findUserNameById(r.hodBy) : ""}</td>
     </tr>
   `).join("");
 
@@ -312,31 +354,31 @@ function exportApprovedLab(user, filters){
   printHTML("Approved Lab Access List", html);
 }
 
-function exportApprovedHostel(user, filters){
+function exportApprovedHostel(user, filters) {
   const users = DB.users();
   const hostel = DB.hostel();
 
   const approved = hostel
-    .filter(r => (r.statusCHIEF||"") === "APPROVED" && (r.statusWARDEN||"") === "APPROVED" && (r.statusSECURITY||"") === "APPROVED")
+    .filter(r => (r.statusCHIEF || "") === "APPROVED" && (r.statusWARDEN || "") === "APPROVED" && (r.statusSECURITY || "") === "APPROVED")
     .filter(r => {
-      const stu = users.find(x => x.id === r.studentId);
-      return stu && visibleToApprover(user, stu);
+      const stu = users.find(x => String(x.id) === String(r.studentId));
+      return !stu ? true : visibleToApprover(user, stu);
     })
     .filter(r => {
       const okYear = !filters.year || String(r.year) === String(filters.year);
-      const okProg = !filters.program || (r.program||"").toLowerCase().includes(filters.program.toLowerCase());
-      const okSec  = !filters.section || (r.section||"").toLowerCase().includes(filters.section.toLowerCase());
+      const okProg = !filters.program || (r.program || "").toLowerCase().includes(filters.program.toLowerCase());
+      const okSec = !filters.section || (r.section || "").toLowerCase().includes(filters.section.toLowerCase());
       return okYear && okProg && okSec;
     });
 
-  const rows = approved.map(r=>`
+  const rows = approved.map(r => `
     <tr>
       <td>${r.regNo}</td><td>${r.studentName}</td><td>${r.program}</td><td>${r.section}</td>
       <td>${r.purpose}</td>
-      <td>${formatDT(r.fromDate,r.fromTime)}</td><td>${formatDT(r.toDate,r.toTime)}</td>
-      <td>${r.chiefBy?findUserNameById(r.chiefBy):""}</td>
-      <td>${r.wardenBy?findUserNameById(r.wardenBy):""}</td>
-      <td>${r.securityBy?findUserNameById(r.securityBy):""}</td>
+      <td>${formatDT(r.fromDate, r.fromTime)}</td><td>${formatDT(r.toDate, r.toTime)}</td>
+      <td>${r.chiefBy ? findUserNameById(r.chiefBy) : ""}</td>
+      <td>${r.wardenBy ? findUserNameById(r.wardenBy) : ""}</td>
+      <td>${r.securityBy ? findUserNameById(r.securityBy) : ""}</td>
     </tr>
   `).join("");
 

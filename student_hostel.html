@@ -1,172 +1,424 @@
+{% load static %}
 <!doctype html>
+
 <html lang="en">
+
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Hostel Outpass - Student</title>
-  <link rel="stylesheet" href="./css/theme.css"/>
-  <script src="./js/app.js"></script>
-  <script src="./js/common.js"></script>
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}" />
+  <script src="{% static 'js/app.js' %}"></script>
+  <script src="{% static 'js/common.js' %}"></script>
 </head>
+
 <body>
-<div class="container">
-  <div class="topbar">
-    <div class="brand">
-      <img src="./assets/logo.png" alt="Logo">
-      <div class="title">
-        <b>SIST MANAGEMENT SYSTEM</b>
-        <span>Hostel Outpass</span>
-      </div>
-    </div>
+  <div class="container">
+    <div class="topbar">
+      <div class="brand">
 
-    <div class="actions">
-      <button class="btn btn-ghost" data-theme-toggle onclick="toggleTheme()">Dark mode</button>
-      <span class="pill" id="who"></span>
-      <button class="btn btn-ghost" onclick="location.href='student_dashboard.html'">Dashboard</button>
-      <button class="btn btn-primary" onclick="signOut()">Sign Out</button>
+        <img src="{% static 'assets/logo.png' %}" alt="Logo">
+
+        <div class="title">
+          <b>SIST MANAGEMENT SYSTEM</b>
+          <span>Hostel Outpass</span>
+        </div>
+
+      </div>
+
+      <div class="actions">
+
+        <button class="btn btn-ghost" onclick="toggleTheme()">Dark mode</button>
+
+        <span class="pill" id="who"></span>
+
+        <button class="btn btn-ghost" onclick="location.href='student_dashboard.html'">
+          Dashboard
+        </button>
+
+        <button class="btn btn-primary" onclick="signOut()">
+          Sign Out
+        </button>
+
+      </div>
+
+    </div>
+    <div style="height:16px"></div>
+    <div class="card">
+      <h2>Hostel Outpass Request</h2>
+
+
+      <form id="hosForm">
+
+        <div class="grid-2">
+
+          <div>
+            <label>Register No</label>
+            <input id="regNo" required>
+          </div>
+
+          <div>
+            <label>Name</label>
+            <input id="studentName" required>
+          </div>
+
+          <div>
+            <label>Program</label>
+            <input id="program" required>
+          </div>
+
+          <div>
+            <label>Section</label>
+            <input id="section" required>
+          </div>
+
+        </div>
+
+
+        <label>Purpose</label>
+
+        <textarea id="purpose" required placeholder="Home visit / Medical / Emergency"></textarea>
+
+
+        <div class="form-row">
+
+          <div>
+            <label>From Date</label>
+            <input type="date" id="fromDate" required>
+          </div>
+
+          <div>
+            <label>To Date</label>
+            <input type="date" id="toDate" required>
+          </div>
+
+        </div>
+
+
+        <div class="form-row">
+
+          <div>
+            <label>From Time</label>
+            <input type="time" id="fromTime" required>
+          </div>
+
+          <div>
+            <label>To Time</label>
+            <input type="time" id="toTime" required>
+          </div>
+
+        </div>
+
+
+        <label>Upload Proof</label>
+
+        <input type="file" id="proof" required>
+
+
+        <div style="margin-top:14px">
+
+          <button class="btn btn-primary" style="width:100%" type="submit">
+            Submit Outpass
+          </button>
+
+        </div>
+
+      </form>
+
+
+      <div class="hr"></div>
+
+
+      <h2>Your Outpass History</h2>
+
+
+      <div class="table-wrap">
+
+        <table>
+
+          <thead>
+
+            <tr>
+              <th>Purpose</th>
+              <th>From</th>
+              <th>To</th>
+              <th>Chief</th>
+              <th>Warden</th>
+              <th>Security</th>
+              <th>PDF</th>
+            </tr>
+
+          </thead>
+
+          <tbody id="hosBody"></tbody>
+
+        </table>
+
+      </div>
+
     </div>
   </div>
+  <script>
 
-  <div style="height:16px"></div>
+    const u = requireAuth();
 
-  <div class="card">
-    <h2>Hostel Outpass Request</h2>
-    <form id="hosForm">
-      <div class="grid-2">
-        <div>
-          <label>Register No</label>
-          <input id="regNo" required>
-        </div>
-        <div>
-          <label>Name</label>
-          <input id="name" required>
-        </div>
-        <div>
-          <label>Program</label>
-          <input id="program" required>
-        </div>
-        <div>
-          <label>Section</label>
-          <input id="section" required>
-        </div>
-      </div>
+    updateThemeButtonText();
 
-      <label>Purpose</label>
-      <textarea id="purpose" required placeholder="e.g., Home visit / Medical / Emergency"></textarea>
+    const whoEl = document.getElementById("who");
 
-      <div class="form-row">
-        <div>
-          <label>From Date</label>
-          <input type="date" id="fromDate" required>
-        </div>
-        <div>
-          <label>To Date</label>
-          <input type="date" id="toDate" required>
-        </div>
-      </div>
+    whoEl.textContent = "Logged in: " + u.name;
 
-      <div class="form-row">
-        <div>
-          <label>From Time</label>
-          <input type="time" id="fromTime" required>
-        </div>
-        <div>
-          <label>To Time</label>
-          <input type="time" id="toTime" required>
-        </div>
-      </div>
 
-      <label>Upload Proof (Consent / Letter / Message)</label>
-      <input type="file" id="proof" required>
 
-      <div style="margin-top:14px;">
-        <button class="btn btn-primary" style="width:100%;">Submit Outpass</button>
-      </div>
-    </form>
+    if (!u.hosteller) {
 
-    <div class="hr"></div>
+      alert("Only hostel students can apply for outpass");
 
-    <h2>Your Outpass History</h2>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Purpose</th>
-            <th>From</th>
-            <th>To</th>
-            <th>Chief</th>
-            <th>Warden</th>
-            <th>Security</th>
-            <th>PDF</th>
-          </tr>
-        </thead>
-        <tbody id="hosBody"></tbody>
-      </table>
-    </div>
-  </div>
-</div>
+      location.href = "student_dashboard.html";
 
-<script>
-  const u = requireAuth();
-  updateThemeButtonText();
-  document.getElementById("who").textContent = `Logged in: ${u.name}`;
+    }
 
-  if(!u.hosteller){
-    alert("Hostel Outpass is only for hostel students.");
-    location.href="student_dashboard.html";
-  }
 
-  regNo.value=u.username; name.value=u.name; program.value=u.program; section.value=u.section;
 
-  function render(){
-    const list = DB.hostel().filter(r=>r.studentId===u.id);
-    hosBody.innerHTML = list.length ? list.map(r=>{
-      const finalOk = (r.statusCHIEF||"")==="APPROVED" && (r.statusWARDEN||"")==="APPROVED" && (r.statusSECURITY||"")==="APPROVED";
-      return `
-        <tr>
-          <td>${r.purpose}</td>
-          <td>${formatDT(r.fromDate,r.fromTime)}</td>
-          <td>${formatDT(r.toDate,r.toTime)}</td>
-          <td>${badge(r.statusCHIEF)}</td>
-          <td>${badge(r.statusWARDEN)}</td>
-          <td>${badge(r.statusSECURITY)}</td>
-          <td>${finalOk ? `<button class="btn btn-ghost" onclick="downloadHostelLetter(${JSON.stringify(r).replaceAll('"','&quot;')})">Download</button>` : `<span class="small">—</span>`}</td>
-        </tr>
-      `;
-    }).join("") : `<tr><td colspan="7">No outpass requests yet.</td></tr>`;
-  }
-  render();
+    const hosForm = document.getElementById("hosForm");
 
-  hosForm.addEventListener("submit",(e)=>{
-    e.preventDefault();
-    const f = proof.files[0];
-    if(!f) return alert("Proof file is required.");
+    const hosBody = document.getElementById("hosBody");
 
-    const hostel = DB.hostel();
-    hostel.unshift({
-      id:"hos"+Date.now(), studentId:u.id,
-      regNo: regNo.value.trim(),
-      studentName: name.value.trim(),
-      program: program.value.trim(),
-      section: section.value.trim(),
-      year: u.year, dept: u.dept,
-      purpose: purpose.value.trim(),
-      fromDate: fromDate.value, toDate: toDate.value,
-      fromTime: fromTime.value, toTime: toTime.value,
-      proofName: f.name,
 
-      statusCHIEF:"PENDING", chiefBy:null,
-      statusWARDEN:"LOCKED", wardenBy:null,
-      statusSECURITY:"LOCKED", securityBy:null,
-      timeline:[{at:new Date().toISOString(), by:u.name, action:"CREATED"}]
+
+    const regNoEl = document.getElementById("regNo");
+
+    const studentNameEl = document.getElementById("studentName");
+
+    const programEl = document.getElementById("program");
+
+    const sectionEl = document.getElementById("section");
+
+    const purposeEl = document.getElementById("purpose");
+
+    const fromDateEl = document.getElementById("fromDate");
+
+    const toDateEl = document.getElementById("toDate");
+
+    const fromTimeEl = document.getElementById("fromTime");
+
+    const toTimeEl = document.getElementById("toTime");
+
+    const proofEl = document.getElementById("proof");
+
+
+
+    regNoEl.value = u.username;
+
+    studentNameEl.value = u.name;
+
+    programEl.value = u.program;
+
+    sectionEl.value = u.section;
+
+
+
+    function renderHistory() {
+
+      const list = DB.hostel().filter(r => r.studentId === u.id);
+
+      if (!list.length) {
+
+        hosBody.innerHTML = `<tr><td colspan="7">No outpass requests yet</td></tr>`;
+
+        return;
+
+      }
+
+
+
+      hosBody.innerHTML = list.map(r => {
+
+        const finalOk =
+
+          r.statusCHIEF === "APPROVED" &&
+
+          r.statusWARDEN === "APPROVED" &&
+
+          r.statusSECURITY === "APPROVED";
+
+
+
+        return `
+
+      <tr>
+
+        <td>${r.purpose}</td>
+
+        <td>${formatDT(r.fromDate, r.fromTime)}</td>
+
+        <td>${formatDT(r.toDate, r.toTime)}</td>
+
+        <td>${badge(r.statusCHIEF || "PENDING")}</td>
+
+        <td>${badge(r.statusWARDEN || "LOCKED")}</td>
+
+        <td>${badge(r.statusSECURITY || "LOCKED")}</td>
+
+        <td>
+
+          ${finalOk
+
+            ? `<button class="btn btn-ghost" onclick='downloadHostelLetter(${JSON.stringify(r)})'>Download</button>`
+
+            : `<span class="small">—</span>`
+
+          }
+
+        </td>
+
+      </tr>
+
+    `;
+
+      }).join("");
+
+    }
+
+
+
+    renderHistory();
+
+
+
+    hosForm.addEventListener("submit", async function (e) {
+
+      e.preventDefault();
+
+
+
+      const proofFile = proofEl.files[0];
+
+      if (!proofFile) {
+
+        alert("Proof required");
+
+        return;
+
+      }
+
+
+
+      const payload = {
+
+        student_id: u.id,
+
+        purpose: purposeEl.value.trim(),
+
+        from_date: fromDateEl.value,
+
+        to_date: toDateEl.value,
+
+        from_time: fromTimeEl.value,
+
+        to_time: toTimeEl.value,
+
+        proof_file: proofFile.name
+
+      };
+
+
+
+      try {
+
+        const res = await fetch("/api/hostel/request/", {
+
+          method: "POST",
+
+          headers: { "Content-Type": "application/json" },
+
+          body: JSON.stringify(payload)
+
+        });
+
+
+
+        const data = await res.json();
+
+
+
+        if (!res.ok) {
+
+          alert(data.error);
+
+          return;
+
+        }
+
+
+
+        const list = DB.hostel();
+
+
+
+        list.unshift({
+
+          id: data.id,
+
+          studentId: u.id,
+
+          regNo: u.username,
+
+          studentName: u.name,
+
+          program: u.program,
+
+          section: u.section,
+
+          purpose: payload.purpose,
+
+          fromDate: payload.from_date,
+
+          toDate: payload.to_date,
+
+          fromTime: payload.from_time,
+
+          toTime: payload.to_time,
+
+          proofName: proofFile.name,
+
+          statusCHIEF: "PENDING",
+
+          statusWARDEN: "LOCKED",
+
+          statusSECURITY: "LOCKED"
+
+        });
+
+
+
+        DB.saveHostel(list);
+
+
+
+        hosForm.reset();
+
+
+
+        renderHistory();
+
+
+
+        alert("Outpass request submitted");
+
+      }
+
+      catch (err) {
+
+        console.error(err);
+
+        alert("Server error");
+
+      }
+
     });
 
-    DB.saveHostel(hostel);
-    hosForm.reset();
-    regNo.value=u.username; name.value=u.name; program.value=u.program; section.value=u.section;
-    render();
-    alert("Outpass request submitted.");
-  });
-</script>
+  </script>
 </body>
+
 </html>

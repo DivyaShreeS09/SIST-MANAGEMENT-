@@ -1,18 +1,19 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Student Dashboard</title>
-  <link rel="stylesheet" href="./css/theme.css"/>
-  <script src="./js/app.js"></script>
-  <script src="./js/common.js"></script>
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}"/>
+  <script src="{% static 'js/app.js' %}"></script>
+  <script src="{% static 'js/common.js' %}"></script>
 </head>
 <body>
 <div class="container">
   <div class="topbar">
     <div class="brand">
-      <img src="./assets/logo.png" alt="Logo">
+      <img src="{% static 'assets/logo.png' %}" alt="Logo">
       <div class="title">
         <b>SIST MANAGEMENT SYSTEM</b>
         <span>Student Portal</span>
@@ -68,7 +69,6 @@
 
     <div class="hr"></div>
 
-    <!-- STACKED histories -->
     <div class="card" style="box-shadow:none; background:transparent; border:none; padding:0;">
       <h2 style="margin-top:0;">Your OD History</h2>
       <div class="table-wrap">
@@ -129,68 +129,75 @@
           </table>
         </div>
       </div>
-
     </div>
   </div>
-
 </div>
 
 <script>
   const u = requireAuth();
+  if (!u) {
+    throw new Error("No authenticated user found.");
+  }
+
   updateThemeButtonText();
 
-  document.getElementById("who").textContent = `Logged in: ${u.name}`;
+  const displayName = u.name || u.full_name || u.username || "Student";
+  const program = u.program || u.department || "";
+  const section = u.section || "";
+  const regNo = u.username || u.register_no || "";
+  const isHosteller = !!u.hosteller;
 
-  // Hostel visibility
-  if(u.hosteller){
+  document.getElementById("who").textContent = `Logged in: ${displayName}`;
+
+  if (isHosteller) {
     document.getElementById("hostelCard").style.display = "";
     document.getElementById("hostelHistoryWrap").style.display = "";
     document.getElementById("hostelDivider").style.display = "";
   }
 
-  // Profile info
-  document.getElementById("pReg").textContent = `Register No: ${u.username}`;
-  document.getElementById("pProg").textContent = u.program;
-  document.getElementById("pSec").textContent = `Section: ${u.section}`;
+  document.getElementById("pReg").textContent = `Register No: ${regNo}`;
+  document.getElementById("pProg").textContent = program;
+  document.getElementById("pSec").textContent = `Section: ${section}`;
 
-  // Avatar load/save
   const avatarKey = `sist_avatar_${u.id}`;
   const avatarImg = document.getElementById("avatarImg");
-  const saved = localStorage.getItem(avatarKey);
-  if(saved){
-    avatarImg.src = saved;
-    avatarImg.style.display="block";
+  const savedAvatar = localStorage.getItem(avatarKey);
+
+  if (savedAvatar) {
+    avatarImg.src = savedAvatar;
+    avatarImg.style.display = "block";
   }
 
-  document.getElementById("saveAvatarBtn").onclick = ()=>{
+  document.getElementById("saveAvatarBtn").onclick = () => {
     const f = document.getElementById("avatarFile").files[0];
-    if(!f) return alert("Select a photo first.");
+    if (!f) {
+      alert("Select a photo first.");
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = ()=>{
+    reader.onload = () => {
       localStorage.setItem(avatarKey, reader.result);
       avatarImg.src = reader.result;
-      avatarImg.style.display="block";
+      avatarImg.style.display = "block";
       alert("Profile photo saved.");
     };
     reader.readAsDataURL(f);
   };
 
-  // Render histories
-  const od = DB.od().filter(r=>r.studentId===u.id);
-  const lab = DB.lab().filter(r=>r.studentId===u.id);
-  const hostel = DB.hostel().filter(r=>r.studentId===u.id);
+  const odList = DB.od().filter(r => String(r.studentId) === String(u.id));
+  const labList = DB.lab().filter(r => String(r.studentId) === String(u.id));
+  const hostelList = DB.hostel().filter(r => String(r.studentId) === String(u.id));
 
-  // OD
-  document.getElementById("odBody").innerHTML = od.length ? od.map(r=>{
-    const finalOk = deriveCCYC(r)==="APPROVED" && (r.statusHOD||"") === "APPROVED";
+  document.getElementById("odBody").innerHTML = odList.length ? odList.map(r => {
+    const finalOk = deriveCCYC(r) === "APPROVED" && (r.statusHOD || "") === "APPROVED";
     return `
       <tr>
-        <td>${r.reason}</td>
-        <td>${formatDT(r.fromDate,r.fromTime)}</td>
-        <td>${formatDT(r.toDate,r.toTime)}</td>
-        <td>${badge(r.statusCC)}</td>
-        <td>${badge(r.statusYC)}</td>
-        <td>${badge(r.statusHOD)}</td>
+        <td>${r.reason || "-"}</td>
+        <td>${formatDT(r.fromDate, r.fromTime)}</td>
+        <td>${formatDT(r.toDate, r.toTime)}</td>
+        <td>${badge(r.statusCC || "PENDING")}</td>
+        <td>${badge(r.statusYC || "PENDING")}</td>
+        <td>${badge(r.statusHOD || "PENDING")}</td>
         <td>
           ${finalOk ? `<button class="btn btn-ghost" onclick="downloadODLetter(${JSON.stringify(r).replaceAll('"','&quot;')})">Download</button>` : `<span class="small">—</span>`}
         </td>
@@ -198,17 +205,16 @@
     `;
   }).join("") : `<tr><td colspan="7">No OD requests yet.</td></tr>`;
 
-  // LAB
-  document.getElementById("labBody").innerHTML = lab.length ? lab.map(r=>{
-    const finalOk = (r.statusMENTOR||"") === "APPROVED" && (r.statusHOD||"") === "APPROVED";
+  document.getElementById("labBody").innerHTML = labList.length ? labList.map(r => {
+    const finalOk = (r.statusMENTOR || "") === "APPROVED" && (r.statusHOD || "") === "APPROVED";
     return `
       <tr>
-        <td>${r.lab}</td>
-        <td>${r.reason}</td>
-        <td>${formatDT(r.fromDate,r.fromTime)}</td>
-        <td>${formatDT(r.toDate,r.toTime)}</td>
-        <td>${badge(r.statusMENTOR)}</td>
-        <td>${badge(r.statusHOD)}</td>
+        <td>${r.lab || "-"}</td>
+        <td>${r.reason || "-"}</td>
+        <td>${formatDT(r.fromDate, r.fromTime)}</td>
+        <td>${formatDT(r.toDate, r.toTime)}</td>
+        <td>${badge(r.statusMENTOR || "PENDING")}</td>
+        <td>${badge(r.statusHOD || "PENDING")}</td>
         <td>
           ${finalOk ? `<button class="btn btn-ghost" onclick="downloadLabLetter(${JSON.stringify(r).replaceAll('"','&quot;')})">Download</button>` : `<span class="small">—</span>`}
         </td>
@@ -216,18 +222,17 @@
     `;
   }).join("") : `<tr><td colspan="7">No lab requests yet.</td></tr>`;
 
-  // HOSTEL
-  if(u.hosteller){
-    document.getElementById("hostelBody").innerHTML = hostel.length ? hostel.map(r=>{
-      const finalOk = (r.statusCHIEF||"") === "APPROVED" && (r.statusWARDEN||"") === "APPROVED" && (r.statusSECURITY||"") === "APPROVED";
+  if (isHosteller) {
+    document.getElementById("hostelBody").innerHTML = hostelList.length ? hostelList.map(r => {
+      const finalOk = (r.statusCHIEF || "") === "APPROVED" && (r.statusWARDEN || "") === "APPROVED" && (r.statusSECURITY || "") === "APPROVED";
       return `
         <tr>
-          <td>${r.purpose}</td>
-          <td>${formatDT(r.fromDate,r.fromTime)}</td>
-          <td>${formatDT(r.toDate,r.toTime)}</td>
-          <td>${badge(r.statusCHIEF)}</td>
-          <td>${badge(r.statusWARDEN)}</td>
-          <td>${badge(r.statusSECURITY)}</td>
+          <td>${r.purpose || "-"}</td>
+          <td>${formatDT(r.fromDate, r.fromTime)}</td>
+          <td>${formatDT(r.toDate, r.toTime)}</td>
+          <td>${badge(r.statusCHIEF || "PENDING")}</td>
+          <td>${badge(r.statusWARDEN || "LOCKED")}</td>
+          <td>${badge(r.statusSECURITY || "LOCKED")}</td>
           <td>
             ${finalOk ? `<button class="btn btn-ghost" onclick="downloadHostelLetter(${JSON.stringify(r).replaceAll('"','&quot;')})">Download</button>` : `<span class="small">—</span>`}
           </td>

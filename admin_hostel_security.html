@@ -1,18 +1,19 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Hostel - Security</title>
-  <link rel="stylesheet" href="./css/theme.css"/>
-  <script src="./js/app.js"></script>
-  <script src="./js/common.js"></script>
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}"/>
+  <script src="{% static 'js/app.js' %}"></script>
+  <script src="{% static 'js/common.js' %}"></script>
 </head>
 <body>
 <div class="container">
   <div class="topbar">
     <div class="brand">
-      <img src="./assets/logo.png" alt="Logo">
+      <img src="{% static 'assets/logo.png' %}" alt="Logo">
       <div class="title">
         <b>SIST MANAGEMENT SYSTEM</b>
         <span>Security Gate Approval</span>
@@ -109,21 +110,39 @@
     }).join("") : `<tr><td colspan="12">No requests found.</td></tr>`;
   }
 
-  function act(id, status){
-    const list = DB.hostel();
-    const r = list.find(x=>x.id===id);
-    if(!r) return;
+  async function act(id,status){
 
-    r.statusSECURITY = status;
-    r.securityBy = user.id;
-    r.timeline = r.timeline || [];
-    r.timeline.unshift({at:new Date().toISOString(), by:user.name, action:`SECURITY_${status}`});
+  const res = await fetch("/api/hostel/security-action/",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({
+      request_id:id,
+      action:status,
+      approver_id:user.id
+    })
+  });
 
-    DB.saveHostel(list);
-    render();
+  const data = await res.json();
 
-    if(status==="APPROVED") alert("Final approval done. Student can download approval letter PDF.");
+  if(!res.ok){
+    alert(data.error);
+    return;
   }
+
+  const list = DB.hostel();
+  const r = list.find(x=>String(x.id)===String(id));
+
+  if(r){
+    r.statusSECURITY=status;
+    DB.saveHostel(list);
+  }
+
+  render();
+
+  if(status==="APPROVED"){
+    alert("Final approval complete.");
+  }
+}
 
   applyBtn.onclick = render;
 

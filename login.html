@@ -1,22 +1,23 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Login - SIST Management</title>
-  <link rel="stylesheet" href="./css/theme.css" />
-  <script src="./js/app.js"></script>
-  <script src="./js/common.js"></script>
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}" />
+  <script src="{% static 'js/app.js' %}"></script>
+  <script src="{% static 'js/common.js' %}"></script>
   <style>
     body{
       background:
         linear-gradient(0deg, rgba(0,0,0,.20), rgba(0,0,0,.10)),
-        url("./assets/scas.jpg") center/cover no-repeat fixed;
+        url("{% static 'assets/scas.jpg' %}") center/cover no-repeat fixed;
     }
     [data-theme="light"] body{
       background:
         linear-gradient(0deg, rgba(255,255,255,.15), rgba(255,255,255,.08)),
-        url("./assets/scas.jpg") center/cover no-repeat fixed;
+        url("{% static 'assets/scas.jpg' %}") center/cover no-repeat fixed;
     }
     .login-wrap{
       min-height: 100vh;
@@ -68,12 +69,15 @@
       font-weight: 700;
       letter-spacing: .2px;
     }
-    [data-theme="light"] .login-head p{ color: rgba(0,0,0,.60); }
-
-    /* FIX visibility in dark mode inputs */
-    .login-card label{ color: rgba(255,255,255,.90); }
-    [data-theme="light"] .login-card label{ color: rgba(0,0,0,.60); }
-
+    [data-theme="light"] .login-head p{
+      color: rgba(0,0,0,.60);
+    }
+    .login-card label{
+      color: rgba(255,255,255,.90);
+    }
+    [data-theme="light"] .login-card label{
+      color: rgba(0,0,0,.60);
+    }
     .rightTop{
       display:flex;
       justify-content:flex-end;
@@ -85,17 +89,17 @@
   <div class="login-wrap">
     <div class="login-card">
       <div class="rightTop">
-        <button class="btn btn-ghost" data-theme-toggle onclick="toggleTheme()">Dark mode</button>
+        <button type="button" class="btn btn-ghost" data-theme-toggle onclick="toggleTheme()">Dark mode</button>
       </div>
 
       <div class="login-head">
-        <img src="./assets/logo.png" alt="Logo"/>
+        <img src="{% static 'assets/logo.png' %}" alt="Logo"/>
         <h1>SIST MANAGEMENT SYSTEM</h1>
         <p>Secure Access Portal</p>
       </div>
 
       <form id="loginForm">
-        <label>Login as</label>
+        <label for="role">Login as</label>
         <select id="role" required>
           <option value="STUDENT">Student</option>
           <option value="CLASS_COORDINATOR">Class Coordinator</option>
@@ -106,49 +110,128 @@
           <option value="SECURITY">Security</option>
         </select>
 
-        <label>Username</label>
+        <label for="username">Username</label>
         <input id="username" placeholder="Enter username" required />
 
-        <label>Password</label>
+        <label for="password">Password</label>
         <input id="password" type="password" placeholder="Enter password" required />
 
         <div style="margin-top:14px;">
-          <button class="btn btn-primary" style="width:100%;">Sign In</button>
+          <button type="submit" class="btn btn-primary" style="width:100%;">Sign In</button>
         </div>
 
         <div class="notice" id="msg" style="margin-top:14px; display:none;"></div>
       </form>
 
-      <footer>Tip: use seeded demo credentials (password123)</footer>
+      <footer>Tip: use real backend credentials now.</footer>
     </div>
   </div>
 
 <script>
   updateThemeButtonText();
 
-  const msg = document.getElementById("msg");
-  const showMsg=(t)=>{ msg.style.display="block"; msg.textContent=t; };
+  const loginForm = document.getElementById("loginForm");
+  const roleEl = document.getElementById("role");
+  const usernameEl = document.getElementById("username");
+  const passwordEl = document.getElementById("password");
+  const msgEl = document.getElementById("msg");
 
-  document.getElementById("loginForm").addEventListener("submit",(e)=>{
-    e.preventDefault();
-    const role = document.getElementById("role").value;
-    const username = document.getElementById("username").value.trim();
-    const password = document.getElementById("password").value;
+  function showMsg(text) {
+    msgEl.style.display = "block";
+    msgEl.textContent = text;
+  }
 
-    const u = DB.users().find(x => x.role===role && x.username===username && x.password===password);
-    if(!u){
-      showMsg("Invalid credentials. Check username/password/role.");
+  function clearMsg() {
+    msgEl.style.display = "none";
+    msgEl.textContent = "";
+  }
+
+  function storeSession(user) {
+    localStorage.setItem("sist_session", JSON.stringify({
+      userId: user.id
+    }));
+
+    localStorage.setItem("sist_current_user", JSON.stringify(user));
+  }
+
+  function redirectByRole(user) {
+    if (user.role === "STUDENT") {
+      window.location.href = "student_dashboard.html";
       return;
     }
-    localStorage.setItem("sist_session", JSON.stringify({userId: u.id}));
+    if (user.role === "CLASS_COORDINATOR") {
+      window.location.href = "admin_od_cc.html";
+      return;
+    }
+    if (user.role === "YEAR_COORDINATOR") {
+      window.location.href = "admin_od_yc.html";
+      return;
+    }
+    if (user.role === "HOD") {
+      window.location.href = "admin_od_hod.html";
+      return;
+    }
+    if (user.role === "CHIEF_WARDEN") {
+      window.location.href = "admin_hostel_chief.html";
+      return;
+    }
+    if (user.role === "WARDEN") {
+      window.location.href = "admin_hostel_warden.html";
+      return;
+    }
+    if (user.role === "SECURITY") {
+      window.location.href = "admin_hostel_security.html";
+      return;
+    }
 
-    if(u.role==="STUDENT") return window.location.href="student_dashboard.html";
-    if(u.role==="CLASS_COORDINATOR") return window.location.href="admin_od_cc.html";
-    if(u.role==="YEAR_COORDINATOR") return window.location.href="admin_od_yc.html";
-    if(u.role==="HOD") return window.location.href="admin_od_hod.html";
-    if(u.role==="CHIEF_WARDEN") return window.location.href="admin_hostel_chief.html";
-    if(u.role==="WARDEN") return window.location.href="admin_hostel_warden.html";
-    if(u.role==="SECURITY") return window.location.href="admin_hostel_security.html";
+    showMsg("Unknown role. Contact admin.");
+  }
+
+  loginForm.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    clearMsg();
+
+    const role = roleEl.value.trim();
+    const username = usernameEl.value.trim();
+    const password = passwordEl.value;
+
+    if (!role || !username || !password) {
+      showMsg("Please fill all fields.");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/login/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          role: role,
+          username: username,
+          password: password
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showMsg(data.error || "Login failed.");
+        return;
+      }
+
+      if (!data.user) {
+        showMsg("User data missing from server response.");
+        return;
+      }
+
+      storeSession(data.user);
+      redirectByRole(data.user);
+
+    } catch (err) {
+      console.error(err);
+      showMsg("Server error. Please try again.");
+    }
   });
 </script>
 </body>

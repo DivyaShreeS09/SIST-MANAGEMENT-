@@ -1,18 +1,19 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>OD - Year Coordinator</title>
-  <link rel="stylesheet" href="./css/theme.css"/>
-  <script src="./js/app.js"></script>
-  <script src="./js/common.js"></script>
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}"/>
+  <script src="{% static 'js/app.js' %}"></script>
+  <script src="{% static 'js/common.js' %}"></script>
 </head>
 <body>
 <div class="container">
   <div class="topbar">
     <div class="brand">
-      <img src="./assets/logo.png" alt="Logo">
+      <img src="{% static 'assets/logo.png' %}" alt="Logo">
       <div class="title">
         <b>SIST MANAGEMENT SYSTEM</b>
         <span>OD Approval - Year Coordinator</span>
@@ -21,7 +22,7 @@
 
     <div class="actions">
       <button class="btn btn-ghost" data-theme-toggle onclick="toggleTheme()">Dark mode</button>
-      <span class="pill">YEAR COORDINATOR | Year Coordinator</span>
+      <span class="pill" id="who"></span>
       <button class="btn btn-primary" onclick="signOut()">Sign Out</button>
     </div>
   </div>
@@ -41,6 +42,7 @@
         <input id="fSection" placeholder="e.g., A1/A2">
       </div>
     </div>
+
     <div class="form-row">
       <div>
         <label>Filter by Year</label>
@@ -80,73 +82,127 @@
 
 <script>
   const user = requireAuth();
-  updateThemeButtonText();
-  if(user.role !== "YEAR_COORDINATOR"){ alert("Unauthorized"); location.href="login.html"; }
+  if (!user) {
+    throw new Error("No authenticated user found.");
+  }
 
-  function matchesFilters(r){
+  updateThemeButtonText();
+
+  const displayName = user.name || user.full_name || user.username || "Year Coordinator";
+  document.getElementById("who").textContent = `YEAR COORDINATOR | ${displayName}`;
+
+  if (user.role !== "YEAR_COORDINATOR") {
+    alert("Unauthorized");
+    location.href = "login.html";
+  }
+
+  const bodyEl = document.getElementById("body");
+  const fProgram = document.getElementById("fProgram");
+  const fSection = document.getElementById("fSection");
+  const fYear = document.getElementById("fYear");
+  const applyBtn = document.getElementById("applyBtn");
+  const exportBtn = document.getElementById("exportBtn");
+
+  function matchesFilters(r) {
     const yp = fProgram.value.trim().toLowerCase();
     const ys = fSection.value.trim().toLowerCase();
     const yy = fYear.value.trim();
 
-    const okP = !yp || (r.program||"").toLowerCase().includes(yp);
-    const okS = !ys || (r.section||"").toLowerCase().includes(ys);
-    const okY = !yy || String(r.year) === String(yy);
+    const okP = !yp || (r.program || "").toLowerCase().includes(yp);
+    const okS = !ys || (r.section || "").toLowerCase().includes(ys);
+    const okY = !yy || String(r.year || "") === String(yy);
+
     return okP && okS && okY;
   }
 
-  function render(){
-    const users = DB.users();
+  function render() {
     let list = DB.od();
 
-    list = list.filter(r=>{
-      const stu = users.find(x=>x.id===r.studentId);
-      return stu && visibleToApprover(user, stu);
-    }).filter(matchesFilters);
+    list = list.filter(r => matchesFilters(r));
 
-    body.innerHTML = list.length ? list.map(r=>{
+    bodyEl.innerHTML = list.length ? list.map(r => {
       const ccyc = deriveCCYC(r);
-      // YC must still be able even if CC already approved; reject must be possible
-      const actionHtml = (r.statusYC==="PENDING" && r.statusHOD!=="APPROVED" && ccyc!=="REJECTED")
-        ? `<button class="btn btn-success" onclick="act('${r.id}','APPROVED')">Approve</button>
-           <button class="btn btn-danger" onclick="act('${r.id}','REJECTED')">Reject</button>`
-        : `<span class="small">—</span>`;
+
+      const actionHtml =
+        (r.statusYC === "PENDING" && (r.statusHOD || "") !== "APPROVED" && ccyc !== "REJECTED")
+          ? `
+            <button class="btn btn-success" onclick="act('${r.id}','APPROVED')">Approve</button>
+            <button class="btn btn-danger" onclick="act('${r.id}','REJECTED')">Reject</button>
+          `
+          : `<span class="small">—</span>`;
 
       return `
         <tr>
-          <td>${r.regNo}</td>
-          <td>${r.studentName}</td>
-          <td>${r.program}</td>
-          <td>${r.section}</td>
-          <td>${r.reason}</td>
-          <td>${formatDT(r.fromDate,r.fromTime)}</td>
-          <td>${formatDT(r.toDate,r.toTime)}</td>
+          <td>${r.regNo || "-"}</td>
+          <td>${r.studentName || "-"}</td>
+          <td>${r.program || "-"}</td>
+          <td>${r.section || "-"}</td>
+          <td>${r.reason || "-"}</td>
+          <td>${formatDT(r.fromDate, r.fromTime)}</td>
+          <td>${formatDT(r.toDate, r.toTime)}</td>
           <td>${r.proofName || "-"}</td>
-          <td>${badge(r.statusCC)}</td>
-          <td>${badge(r.statusYC)}</td>
-          <td>${badge(r.statusHOD)}</td>
+          <td>${badge(r.statusCC || "PENDING")}</td>
+          <td>${badge(r.statusYC || "PENDING")}</td>
+          <td>${badge(r.statusHOD || "PENDING")}</td>
           <td style="display:flex; gap:8px; flex-wrap:wrap;">${actionHtml}</td>
         </tr>
       `;
     }).join("") : `<tr><td colspan="12">No requests found.</td></tr>`;
   }
 
-  function act(id, status){
-    const list = DB.od();
-    const r = list.find(x=>x.id===id);
-    if(!r) return;
+  async function act(id, status) {
+    try {
+      const res = await fetch("/api/od/yc-action/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          request_id: id,
+          action: status,
+          approver_id: user.id
+        })
+      });
 
-    r.statusYC = status;
-    r.ycBy = user.id;
-    r.timeline = r.timeline || [];
-    r.timeline.unshift({at:new Date().toISOString(), by:user.name, action:`YC_${status}`});
+      const data = await res.json();
 
-    DB.saveOD(list);
-    render();
+      if (!res.ok) {
+        alert(data.error || "YC action failed.");
+        return;
+      }
+
+      // Temporary local sync for current frontend view
+      const list = DB.od();
+      const r = list.find(x => String(x.id) === String(id));
+      if (r) {
+        r.statusYC = status;
+        r.ycBy = user.id;
+        r.timeline = r.timeline || [];
+        r.timeline.unshift({
+          at: new Date().toISOString(),
+          by: displayName,
+          action: `YC_${status}`
+        });
+
+        if (status === "REJECTED") {
+          r.finalStatus = "REJECTED";
+        }
+
+        DB.saveOD(list);
+      }
+
+      render();
+      alert(`Request ${status.toLowerCase()} successfully.`);
+
+    } catch (err) {
+      console.error(err);
+      alert("Server error while updating YC approval.");
+    }
   }
 
   applyBtn.onclick = render;
 
-  exportBtn.onclick = ()=>{
+  exportBtn.onclick = () => {
     exportApprovedOD(user, {
       year: fYear.value.trim(),
       program: fProgram.value.trim(),

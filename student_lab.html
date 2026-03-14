@@ -1,18 +1,19 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Lab Access - Student</title>
-  <link rel="stylesheet" href="./css/theme.css"/>
-  <script src="./js/app.js"></script>
-  <script src="./js/common.js"></script>
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}"/>
+  <script src="{% static 'js/app.js' %}"></script>
+  <script src="{% static 'js/common.js' %}"></script>
 </head>
 <body>
 <div class="container">
   <div class="topbar">
     <div class="brand">
-      <img src="./assets/logo.png" alt="Logo">
+      <img src="{% static 'assets/logo.png' %}" alt="Logo">
       <div class="title">
         <b>SIST MANAGEMENT SYSTEM</b>
         <span>Lab Access Request</span>
@@ -31,64 +32,65 @@
 
   <div class="card">
     <h2>Lab Access Request</h2>
+
     <form id="labForm">
       <div class="grid-2">
         <div>
-          <label>Register No</label>
+          <label for="regNo">Register No</label>
           <input id="regNo" required>
         </div>
         <div>
-          <label>Name</label>
-          <input id="name" required>
+          <label for="studentName">Name</label>
+          <input id="studentName" required>
         </div>
         <div>
-          <label>Program</label>
+          <label for="program">Program</label>
           <input id="program" required>
         </div>
         <div>
-          <label>Section</label>
+          <label for="section">Section</label>
           <input id="section" required>
         </div>
       </div>
 
       <div class="grid-2">
         <div>
-          <label>Lab</label>
+          <label for="lab">Lab</label>
           <input id="lab" required placeholder="e.g., AI Lab - SCAS">
         </div>
         <div>
-          <label>Reason</label>
+          <label for="reason">Reason</label>
           <input id="reason" required placeholder="e.g., Project / Assignment / Practical">
         </div>
       </div>
 
       <div class="form-row">
         <div>
-          <label>From Date</label>
+          <label for="fromDate">From Date</label>
           <input type="date" id="fromDate" required>
         </div>
         <div>
-          <label>To Date</label>
+          <label for="toDate">To Date</label>
           <input type="date" id="toDate" required>
         </div>
       </div>
 
       <div class="form-row">
         <div>
-          <label>From Time</label>
+          <label for="fromTime">From Time</label>
           <input type="time" id="fromTime" required>
         </div>
         <div>
-          <label>To Time</label>
+          <label for="toTime">To Time</label>
           <input type="time" id="toTime" required>
         </div>
       </div>
 
-      <label>Upload Proof (Letter / Approval / Instruction)</label>
+      <label for="proof">Upload Proof (Letter / Approval / Instruction)</label>
       <input type="file" id="proof" required>
 
       <div style="margin-top:14px;">
-        <button class="btn btn-primary" style="width:100%;">Submit Lab Request</button>
+        <button type="submit" class="btn btn-primary" style="width:100%;" id="submitBtn">Submit Lab Request</button>
       </div>
     </form>
 
@@ -116,63 +118,186 @@
 
 <script>
   const u = requireAuth();
+  if (!u) {
+    throw new Error("No authenticated user found.");
+  }
+
   updateThemeButtonText();
-  document.getElementById("who").textContent = `Logged in: ${u.name}`;
 
-  // Autofill (still required)
-  regNo.value = u.username;
-  name.value = u.name;
-  program.value = u.program;
-  section.value = u.section;
+  const displayName = u.name || u.full_name || u.username || "Student";
+  const programValue = u.program || u.department || "";
+  const sectionValue = u.section || "";
+  const deptValue = u.dept || u.department || "";
+  const yearValue = u.year || "";
 
-  function render(){
-    const list = DB.lab().filter(r=>r.studentId===u.id);
-    labBody.innerHTML = list.length ? list.map(r=>{
-      const finalOk = (r.statusMENTOR||"") === "APPROVED" && (r.statusHOD||"") === "APPROVED";
+  const whoEl = document.getElementById("who");
+  const labFormEl = document.getElementById("labForm");
+  const labBodyEl = document.getElementById("labBody");
+  const submitBtnEl = document.getElementById("submitBtn");
+
+  const regNoEl = document.getElementById("regNo");
+  const studentNameEl = document.getElementById("studentName");
+  const programEl = document.getElementById("program");
+  const sectionEl = document.getElementById("section");
+  const labEl = document.getElementById("lab");
+  const reasonEl = document.getElementById("reason");
+  const fromDateEl = document.getElementById("fromDate");
+  const toDateEl = document.getElementById("toDate");
+  const fromTimeEl = document.getElementById("fromTime");
+  const toTimeEl = document.getElementById("toTime");
+  const proofEl = document.getElementById("proof");
+
+  whoEl.textContent = `Logged in: ${displayName}`;
+
+  regNoEl.value = u.username || u.register_no || "";
+  studentNameEl.value = displayName;
+  programEl.value = programValue;
+  sectionEl.value = sectionValue;
+
+  function safeAttr(obj) {
+    return JSON.stringify(obj).replace(/"/g, '&quot;');
+  }
+
+  function renderLabHistory() {
+    const list = DB.lab().filter(r => String(r.studentId) === String(u.id));
+
+    if (!list.length) {
+      labBodyEl.innerHTML = `<tr><td colspan="7">No lab requests yet.</td></tr>`;
+      return;
+    }
+
+    labBodyEl.innerHTML = list.map(r => {
+      const finalOk = (r.statusMENTOR || "") === "APPROVED" && (r.statusHOD || "") === "APPROVED";
+
       return `
         <tr>
-          <td>${r.lab}</td>
-          <td>${r.reason}</td>
-          <td>${formatDT(r.fromDate,r.fromTime)}</td>
-          <td>${formatDT(r.toDate,r.toTime)}</td>
-          <td>${badge(r.statusMENTOR)}</td>
-          <td>${badge(r.statusHOD)}</td>
-          <td>${finalOk ? `<button class="btn btn-ghost" onclick="downloadLabLetter(${JSON.stringify(r).replaceAll('"','&quot;')})">Download</button>` : `<span class="small">—</span>`}</td>
+          <td>${r.lab || "-"}</td>
+          <td>${r.reason || "-"}</td>
+          <td>${formatDT(r.fromDate, r.fromTime)}</td>
+          <td>${formatDT(r.toDate, r.toTime)}</td>
+          <td>${badge(r.statusMENTOR || "PENDING")}</td>
+          <td>${badge(r.statusHOD || "PENDING")}</td>
+          <td>
+            ${
+              finalOk
+                ? `<button class="btn btn-ghost" onclick="downloadLabLetter(${safeAttr(r)})">Download</button>`
+                : `<span class="small">—</span>`
+            }
+          </td>
         </tr>
       `;
-    }).join("") : `<tr><td colspan="7">No lab requests yet.</td></tr>`;
+    }).join("");
   }
-  render();
 
-  labForm.addEventListener("submit",(e)=>{
+  renderLabHistory();
+
+  labFormEl.addEventListener("submit", async function (e) {
     e.preventDefault();
-    const f = proof.files[0];
-    if(!f) return alert("Proof file is required.");
 
-    const labReq = DB.lab();
-    labReq.unshift({
-      id:"lab"+Date.now(), studentId:u.id,
-      regNo: regNo.value.trim(),
-      studentName: name.value.trim(),
-      program: program.value.trim(),
-      section: section.value.trim(),
-      year: u.year, dept: u.dept,
-      lab: lab.value.trim(),
-      reason: reason.value.trim(),
-      fromDate: fromDate.value, toDate: toDate.value,
-      fromTime: fromTime.value, toTime: toTime.value,
-      proofName: f.name,
+    const proofFile = proofEl.files[0];
+    if (!proofFile) {
+      alert("Proof file is required.");
+      return;
+    }
 
-      statusMENTOR:"PENDING", mentorBy:null,
-      statusHOD:"PENDING", hodBy:null,
-      timeline:[{at:new Date().toISOString(), by:u.name, action:"CREATED"}]
-    });
+    const regNo = (regNoEl.value || "").trim();
+    const studentName = (studentNameEl.value || "").trim();
+    const program = (programEl.value || "").trim();
+    const section = (sectionEl.value || "").trim();
+    const labName = (labEl.value || "").trim();
+    const reason = (reasonEl.value || "").trim();
+    const fromDate = fromDateEl.value || "";
+    const toDate = toDateEl.value || "";
+    const fromTime = fromTimeEl.value || "";
+    const toTime = toTimeEl.value || "";
 
-    DB.saveLab(labReq);
-    labForm.reset();
-    regNo.value=u.username; name.value=u.name; program.value=u.program; section.value=u.section;
-    render();
-    alert("Lab request submitted.");
+    if (!regNo || !studentName || !program || !section || !labName || !reason || !fromDate || !toDate || !fromTime || !toTime) {
+      alert("Please fill all required fields.");
+      return;
+    }
+
+    submitBtnEl.disabled = true;
+    submitBtnEl.textContent = "Submitting...";
+
+    try {
+      const res = await fetch("/api/lab/request/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          student_id: u.id,
+          lab: labName,
+          reason: reason,
+          from_date: fromDate,
+          to_date: toDate,
+          from_time: fromTime,
+          to_time: toTime,
+          proof_file: proofFile.name
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || "Lab request submission failed.");
+        submitBtnEl.disabled = false;
+        submitBtnEl.textContent = "Submit Lab Request";
+        return;
+      }
+
+      // temporary local sync so student dashboard/history updates immediately
+      const labReqList = DB.lab();
+
+      labReqList.unshift({
+        id: data.id || ("lab" + Date.now()),
+        studentId: u.id,
+        regNo: regNo,
+        studentName: studentName,
+        program: program,
+        section: section,
+        year: yearValue,
+        dept: deptValue,
+        lab: labName,
+        reason: reason,
+        fromDate: fromDate,
+        toDate: toDate,
+        fromTime: fromTime,
+        toTime: toTime,
+        proofName: proofFile.name,
+
+        statusMENTOR: "PENDING",
+        mentorBy: null,
+        statusHOD: "PENDING",
+        hodBy: null,
+        timeline: [
+          {
+            at: new Date().toISOString(),
+            by: displayName,
+            action: "CREATED"
+          }
+        ]
+      });
+
+      DB.saveLab(labReqList);
+
+      labFormEl.reset();
+
+      regNoEl.value = u.username || u.register_no || "";
+      studentNameEl.value = displayName;
+      programEl.value = programValue;
+      sectionEl.value = sectionValue;
+
+      renderLabHistory();
+      alert("Lab request submitted successfully.");
+
+    } catch (err) {
+      console.error(err);
+      alert("Server error while submitting lab request.");
+    } finally {
+      submitBtnEl.disabled = false;
+      submitBtnEl.textContent = "Submit Lab Request";
+    }
   });
 </script>
 </body>

@@ -1,12 +1,40 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate
+from django.core.mail import send_mail
+from django.conf import settings
 import json
 
 from accounts.models import User
 from od.models import ODRequest
 from lab.models import LabRequest
 from hostel.models import HostelOutpassRequest
+
+
+def send_status_email(student, request_type, status_text):
+    if not student.email:
+        return
+
+    subject = f"{request_type} Request {status_text} - SIST Management System"
+
+    message = f"""
+Hello {student.full_name},
+
+Your {request_type} request has been {status_text.lower()}.
+
+Please log in to the SIST Management System to view the latest status and download your approval letter if applicable.
+
+Regards,
+SIST Management System
+""".strip()
+
+    send_mail(
+        subject,
+        message,
+        settings.DEFAULT_FROM_EMAIL,
+        [student.email],
+        fail_silently=False,
+    )
 
 
 @csrf_exempt
@@ -41,6 +69,7 @@ def login_view(request):
             "year": user.year,
             "dept": user.department,
             "hosteller": user.hosteller,
+            "email": user.email,
         }
     })
 
@@ -51,22 +80,37 @@ def create_od_request(request):
         return JsonResponse({"error": "Only POST allowed"}, status=405)
 
     try:
-        data = json.loads(request.body)
-        student = User.objects.get(id=data["student_id"])
+        student_id = request.POST.get("student_id")
+        reason = request.POST.get("reason")
+        from_date = request.POST.get("from_date")
+        to_date = request.POST.get("to_date")
+        from_time = request.POST.get("from_time")
+        to_time = request.POST.get("to_time")
+        proof_file = request.FILES.get("proof_file")
+
+        student = User.objects.get(id=student_id)
+
+        od = ODRequest.objects.create(
+            student=student,
+            reason=reason,
+            from_date=from_date,
+            to_date=to_date,
+            from_time=from_time,
+            to_time=to_time,
+            proof_file=proof_file,
+        )
+
+        return JsonResponse({
+            "status": "success",
+            "id": od.id,
+            "proof_url": od.proof_file.url if od.proof_file else "",
+            "proof_name": od.proof_file.name.split("/")[-1] if od.proof_file else "",
+        })
+
+    except User.DoesNotExist:
+        return JsonResponse({"error": "Student not found"}, status=404)
     except Exception as e:
-        return JsonResponse({"error": f"Bad request: {str(e)}"}, status=400)
-
-    od = ODRequest.objects.create(
-        student=student,
-        reason=data["reason"],
-        from_date=data["from_date"],
-        to_date=data["to_date"],
-        from_time=data["from_time"],
-        to_time=data["to_time"],
-        proof_file=data.get("proof_file", "")
-    )
-
-    return JsonResponse({"status": "success", "id": od.id})
+        return JsonResponse({"error": str(e)}, status=400)
 
 
 @csrf_exempt
@@ -75,26 +119,37 @@ def create_lab_request(request):
         return JsonResponse({"error": "Only POST allowed"}, status=405)
 
     try:
-        data = json.loads(request.body)
-        student = User.objects.get(id=data["student_id"])
+        student_id = request.POST.get("student_id")
+        lab_name = request.POST.get("lab")
+        reason = request.POST.get("reason")
+        from_date = request.POST.get("from_date")
+        to_date = request.POST.get("to_date")
+        from_time = request.POST.get("from_time")
+        to_time = request.POST.get("to_time")
+        proof_file = request.FILES.get("proof_file")
+
+        student = User.objects.get(id=student_id)
 
         lab = LabRequest.objects.create(
             student=student,
-            lab_name=data["lab"],
-            reason=data["reason"],
-            from_date=data["from_date"],
-            to_date=data["to_date"],
-            from_time=data["from_time"],
-            to_time=data["to_time"],
-            proof_file=data.get("proof_file", "")
+            lab_name=lab_name,
+            reason=reason,
+            from_date=from_date,
+            to_date=to_date,
+            from_time=from_time,
+            to_time=to_time,
+            proof_file=proof_file,
         )
 
-        return JsonResponse({"status": "success", "id": lab.id})
+        return JsonResponse({
+            "status": "success",
+            "id": lab.id,
+            "proof_url": lab.proof_file.url if lab.proof_file else "",
+            "proof_name": lab.proof_file.name.split("/")[-1] if lab.proof_file else "",
+        })
 
     except User.DoesNotExist:
         return JsonResponse({"error": "Student not found"}, status=404)
-    except KeyError as e:
-        return JsonResponse({"error": f"Missing field: {str(e)}"}, status=400)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
@@ -105,22 +160,38 @@ def create_hostel_request(request):
         return JsonResponse({"error": "Only POST allowed"}, status=405)
 
     try:
-        data = json.loads(request.body)
-        student = User.objects.get(id=data["student_id"])
+        student_id = request.POST.get("student_id")
+        purpose = request.POST.get("purpose")
+        from_date = request.POST.get("from_date")
+        to_date = request.POST.get("to_date")
+        from_time = request.POST.get("from_time")
+        to_time = request.POST.get("to_time")
+        proof_file = request.FILES.get("proof_file")
+
+        student = User.objects.get(id=student_id)
+
+        hos = HostelOutpassRequest.objects.create(
+            student=student,
+            purpose=purpose,
+            from_date=from_date,
+            to_date=to_date,
+            from_time=from_time,
+            to_time=to_time,
+            proof_file=proof_file,
+        )
+
+        return JsonResponse({
+            "status": "success",
+            "id": hos.id,
+            "proof_url": hos.proof_file.url if hos.proof_file else "",
+            "proof_name": hos.proof_file.name.split("/")[-1] if hos.proof_file else "",
+        })
+
+    except User.DoesNotExist:
+        return JsonResponse({"error": "Student not found"}, status=404)
     except Exception as e:
-        return JsonResponse({"error": f"Bad request: {str(e)}"}, status=400)
+        return JsonResponse({"error": str(e)}, status=400)
 
-    hos = HostelOutpassRequest.objects.create(
-        student=student,
-        purpose=data["purpose"],
-        from_date=data["from_date"],
-        to_date=data["to_date"],
-        from_time=data["from_time"],
-        to_time=data["to_time"],
-        proof_file=data.get("proof_file", "")
-    )
-
-    return JsonResponse({"status": "success", "id": hos.id})
 
 @csrf_exempt
 def cc_od_action(request):
@@ -155,7 +226,8 @@ def cc_od_action(request):
         return JsonResponse({"error": "Approver not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
-    
+
+
 @csrf_exempt
 def yc_od_action(request):
     if request.method != "POST":
@@ -176,7 +248,6 @@ def yc_od_action(request):
         od.yc_status = action
         od.yc_action_by = approver
 
-        # reject wins
         if action == "REJECTED":
             od.final_status = "REJECTED"
 
@@ -195,7 +266,8 @@ def yc_od_action(request):
         return JsonResponse({"error": "Approver not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
-    
+
+
 @csrf_exempt
 def hod_od_action(request):
     if request.method != "POST":
@@ -213,8 +285,7 @@ def hod_od_action(request):
         od = ODRequest.objects.get(id=request_id)
         approver = User.objects.get(id=approver_id)
 
-        # reject wins from CC/YC stage
-        cc_status = (od.cc_status or "PENDING").upper()
+        cc_status = (od.status_cc or "PENDING").upper()
         yc_status = (od.yc_status or "PENDING").upper()
 
         if cc_status == "REJECTED" or yc_status == "REJECTED":
@@ -228,8 +299,10 @@ def hod_od_action(request):
 
         if action == "APPROVED":
             od.final_status = "APPROVED"
-        elif action == "REJECTED":
+            send_status_email(od.student, "OD", "APPROVED")
+        else:
             od.final_status = "REJECTED"
+            send_status_email(od.student, "OD", "REJECTED")
 
         od.save()
 
@@ -246,7 +319,8 @@ def hod_od_action(request):
         return JsonResponse({"error": "Approver not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
-    
+
+
 @csrf_exempt
 def mentor_lab_action(request):
     if request.method != "POST":
@@ -285,7 +359,8 @@ def mentor_lab_action(request):
         return JsonResponse({"error": "Approver not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
-    
+
+
 @csrf_exempt
 def hod_lab_action(request):
     if request.method != "POST":
@@ -316,8 +391,10 @@ def hod_lab_action(request):
 
         if action == "APPROVED":
             lab.final_status = "APPROVED"
+            send_status_email(lab.student, "Lab Access", "APPROVED")
         else:
             lab.final_status = "REJECTED"
+            send_status_email(lab.student, "Lab Access", "REJECTED")
 
         lab.save()
 
@@ -334,10 +411,10 @@ def hod_lab_action(request):
         return JsonResponse({"error": "Approver not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
-    
+
+
 @csrf_exempt
 def chief_hostel_action(request):
-
     if request.method != "POST":
         return JsonResponse({"error": "Only POST allowed"}, status=405)
 
@@ -355,7 +432,7 @@ def chief_hostel_action(request):
         hos.chief_action_by = approver
 
         if action == "APPROVED":
-            hos.warden_status = "PENDING"   # unlock next stage
+            hos.warden_status = "PENDING"
 
         if action == "REJECTED":
             hos.final_status = "REJECTED"
@@ -369,10 +446,10 @@ def chief_hostel_action(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
-    
+
+
 @csrf_exempt
 def warden_hostel_action(request):
-
     if request.method != "POST":
         return JsonResponse({"error": "Only POST allowed"}, status=405)
 
@@ -393,7 +470,7 @@ def warden_hostel_action(request):
         hos.warden_action_by = approver
 
         if action == "APPROVED":
-            hos.security_status = "PENDING"   # unlock security
+            hos.security_status = "PENDING"
 
         if action == "REJECTED":
             hos.final_status = "REJECTED"
@@ -407,10 +484,10 @@ def warden_hostel_action(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
-    
+
+
 @csrf_exempt
 def security_hostel_action(request):
-
     if request.method != "POST":
         return JsonResponse({"error": "Only POST allowed"}, status=405)
 
@@ -432,8 +509,10 @@ def security_hostel_action(request):
 
         if action == "APPROVED":
             hos.final_status = "APPROVED"
+            send_status_email(hos.student, "Hostel Outpass", "APPROVED")
         else:
             hos.final_status = "REJECTED"
+            send_status_email(hos.student, "Hostel Outpass", "REJECTED")
 
         hos.save()
 

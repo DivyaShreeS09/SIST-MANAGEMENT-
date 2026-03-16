@@ -1,0 +1,218 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lab - Mentor</title>
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}" />
+  <script src="{% static 'js/app.js' %}?v=99"></script>
+  <script src="{% static 'js/common.js' %}?v=99"></script>"></script>
+</head>
+
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div class="brand">
+        <img src="{% static 'assets/logo.png' %}" alt="Logo">
+        <div class="title">
+          <b>SIST MANAGEMENT SYSTEM</b>
+          <span>Lab Approval - Mentor</span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-ghost" data-theme-toggle onclick="toggleTheme()">Dark mode</button>
+        <span class="pill" id="who"></span>
+        <button class="btn btn-primary" onclick="signOut()">Sign Out</button>
+      </div>
+    </div>
+
+    <div style="height:16px"></div>
+
+    <div class="card">
+      <h2>Lab Approval Dashboard</h2>
+
+      <div class="grid-2">
+        <div>
+          <label>Filter by Program</label>
+          <input id="fProgram" placeholder="e.g., B.E CSE AIML">
+        </div>
+        <div>
+          <label>Filter by Section</label>
+          <input id="fSection" placeholder="e.g., A2">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div>
+          <label>Filter by Year</label>
+          <input id="fYear" placeholder="e.g., 3">
+        </div>
+        <div style="display:flex; gap:10px; align-items:flex-end;">
+          <button class="btn btn-ghost" id="applyBtn" type="button">Apply</button>
+          <button class="btn btn-primary" id="exportBtn" type="button">Export Approved List (PDF)</button>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Reg No</th>
+              <th>Name</th>
+              <th>Program</th>
+              <th>Section</th>
+              <th>Lab</th>
+              <th>Reason</th>
+              <th>From</th>
+              <th>To</th>
+              <th>Proof</th>
+              <th>Mentor</th>
+              <th>HOD</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const user = requireAuth();
+    if (!user) {
+      throw new Error("No authenticated user found.");
+    }
+
+    updateThemeButtonText();
+
+    const displayName = user.name || user.full_name || user.username || "Mentor";
+    document.getElementById("who").textContent = `MENTOR | ${displayName}`;
+
+    if (user.role !== "CLASS_COORDINATOR") {
+      alert("Unauthorized");
+      location.href = "login.html";
+    }
+
+    const bodyEl = document.getElementById("body");
+    const fProgram = document.getElementById("fProgram");
+    const fSection = document.getElementById("fSection");
+    const fYear = document.getElementById("fYear");
+    const applyBtn = document.getElementById("applyBtn");
+    const exportBtn = document.getElementById("exportBtn");
+
+    function matchesFilters(r) {
+      const yp = fProgram.value.trim().toLowerCase();
+      const ys = fSection.value.trim().toLowerCase();
+      const yy = fYear.value.trim();
+
+      const okP = !yp || (r.program || "").toLowerCase().includes(yp);
+      const okS = !ys || (r.section || "").toLowerCase().includes(ys);
+      const okY = !yy || String(r.year || "") === String(yy);
+
+      return okP && okS && okY;
+    }
+
+    function render() {
+      let list = DB.lab();
+      list = list.filter(r => matchesFilters(r));
+
+      bodyEl.innerHTML = list.length ? list.map(r => {
+        const proofHtml = r.proofUrl
+          ? `<a href="${r.proofUrl}" target="_blank" class="btn btn-ghost">View Proof</a>`
+          : (r.proofName || "-");
+
+        const actionHtml =
+          (r.statusMENTOR === "PENDING")
+            ? `
+            <button class="btn btn-success" onclick="act('${r.id}','APPROVED')">Approve</button>
+            <button class="btn btn-danger" onclick="act('${r.id}','REJECTED')">Reject</button>
+          `
+            : `<span class="small">—</span>`;
+
+        return `
+        <tr>
+          <td>${r.regNo || "-"}</td>
+          <td>${r.studentName || "-"}</td>
+          <td>${r.program || "-"}</td>
+          <td>${r.section || "-"}</td>
+          <td>${r.lab || "-"}</td>
+          <td>${r.reason || "-"}</td>
+          <td>${formatDT(r.fromDate, r.fromTime)}</td>
+          <td>${formatDT(r.toDate, r.toTime)}</td>
+          <td>${proofHtml}</td>
+          <td>${badge(r.statusMENTOR || "PENDING")}</td>
+          <td>${badge(r.statusHOD || "PENDING")}</td>
+          <td style="display:flex; gap:8px; flex-wrap:wrap;">${actionHtml}</td>
+        </tr>
+      `;
+      }).join("") : `<tr><td colspan="12">No requests found.</td></tr>`;
+    }
+
+    async function act(id, status) {
+      try {
+        const res = await fetch("/api/lab/mentor-action/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            request_id: id,
+            action: status,
+            approver_id: user.id
+          })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          alert(data.error || "Mentor action failed.");
+          return;
+        }
+
+        const list = DB.lab();
+        const r = list.find(x => String(x.id) === String(id));
+        if (r) {
+          r.statusMENTOR = status;
+          r.mentorBy = user.id;
+          r.mentorByName = displayName;
+          r.timeline = r.timeline || [];
+          r.timeline.unshift({
+            at: new Date().toISOString(),
+            by: displayName,
+            action: `MENTOR_${status}`
+          });
+
+          if (status === "REJECTED") {
+            r.finalStatus = "REJECTED";
+          }
+
+          DB.saveLab(list);
+        }
+
+        render();
+        alert(`Request ${status.toLowerCase()} successfully.`);
+
+      } catch (err) {
+        console.error(err);
+        alert("Server error while updating mentor approval.");
+      }
+    }
+
+    applyBtn.onclick = render;
+
+    exportBtn.onclick = () => {
+      exportApprovedLab(user, {
+        year: fYear.value.trim(),
+        program: fProgram.value.trim(),
+        section: fSection.value.trim()
+      });
+    };
+
+    render();
+  </script>
+</body>
+</html>

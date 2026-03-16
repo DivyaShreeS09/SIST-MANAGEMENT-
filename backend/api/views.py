@@ -5,22 +5,33 @@ from django.core.mail import send_mail
 from django.conf import settings
 import json
 
-from accounts.models import User
+from accounts.models import User, ApproverAssignment
 from od.models import ODRequest
 from lab.models import LabRequest
 from hostel.models import HostelOutpassRequest
 
 
-def send_status_email(student, request_type, status_text):
+def safe_name(user_obj):
+    if not user_obj:
+        return "—"
+    return user_obj.full_name or user_obj.username or "—"
+
+
+def send_status_email(student, request_type, status_text, details_text):
     if not student.email:
         return
 
     subject = f"{request_type} Request {status_text} - SIST Management System"
 
     message = f"""
+SATHYABAMA INSTITUTE OF SCIENCE AND TECHNOLOGY
+(DEEMED TO BE UNIVERSITY)
+
 Hello {student.full_name},
 
-Your {request_type} request has been {status_text.lower()}.
+Your {request_type} request has been {status_text}.
+
+{details_text}
 
 Please log in to the SIST Management System to view the latest status and download your approval letter if applicable.
 
@@ -35,6 +46,63 @@ SIST Management System
         [student.email],
         fail_silently=False,
     )
+
+
+def build_od_email_details(od):
+    return f"""
+Student Name: {od.student.full_name}
+Register Number: {od.student.register_no or od.student.username}
+Program: {od.student.program or "—"}
+Section: {od.student.section or "—"}
+Reason / Subject: {od.reason}
+From: {od.from_date} {od.from_time}
+To: {od.to_date} {od.to_time}
+
+Approval Details:
+Class Coordinator: {safe_name(od.cc_action_by)}
+Year Coordinator: {safe_name(od.yc_action_by)}
+HOD: {safe_name(od.hod_action_by)}
+
+Final Status: {od.final_status}
+""".strip()
+
+
+def build_lab_email_details(lab):
+    return f"""
+Student Name: {lab.student.full_name}
+Register Number: {lab.student.register_no or lab.student.username}
+Program: {lab.student.program or "—"}
+Section: {lab.student.section or "—"}
+Lab: {lab.lab_name}
+Reason: {lab.reason}
+From: {lab.from_date} {lab.from_time}
+To: {lab.to_date} {lab.to_time}
+
+Approval Details:
+Mentor: {safe_name(lab.mentor_action_by)}
+HOD: {safe_name(lab.hod_action_by)}
+
+Final Status: {lab.final_status}
+""".strip()
+
+
+def build_hostel_email_details(hos):
+    return f"""
+Student Name: {hos.student.full_name}
+Register Number: {hos.student.register_no or hos.student.username}
+Program: {hos.student.program or "—"}
+Section: {hos.student.section or "—"}
+Purpose: {hos.purpose}
+From: {hos.from_date} {hos.from_time}
+To: {hos.to_date} {hos.to_time}
+
+Approval Details:
+Chief Warden: {safe_name(hos.chief_action_by)}
+Warden: {safe_name(hos.warden_action_by)}
+Security: {safe_name(hos.security_action_by)}
+
+Final Status: {hos.final_status}
+""".strip()
 
 
 @csrf_exempt
@@ -57,6 +125,21 @@ def login_view(request):
     if role and user.role != role:
         return JsonResponse({"error": "Role mismatch"}, status=403)
 
+    assignments_qs = ApproverAssignment.objects.filter(approver=user)
+
+    assignments = []
+    sections = []
+
+    for a in assignments_qs:
+        assignments.append({
+            "role": a.role,
+            "program": a.program,
+            "year": a.year,
+            "section": a.section,
+        })
+        if a.section:
+            sections.append(a.section)
+
     return JsonResponse({
         "status": "success",
         "user": {
@@ -70,6 +153,8 @@ def login_view(request):
             "dept": user.department,
             "hosteller": user.hosteller,
             "email": user.email,
+            "assigned_sections": sections,
+            "assignments": assignments,
         }
     })
 
@@ -210,14 +295,19 @@ def cc_od_action(request):
         od = ODRequest.objects.get(id=request_id)
         approver = User.objects.get(id=approver_id)
 
-        od.status_cc = action
-        od.cc_by = approver
+        od.cc_status = action
+        od.cc_action_by = approver
+
+        if action == "REJECTED":
+            od.final_status = "REJECTED"
+
         od.save()
 
         return JsonResponse({
             "status": "success",
             "request_id": od.id,
-            "cc_status": od.status_cc
+            "cc_status": od.cc_status,
+            "final_status": od.final_status
         })
 
     except ODRequest.DoesNotExist:
@@ -285,7 +375,7 @@ def hod_od_action(request):
         od = ODRequest.objects.get(id=request_id)
         approver = User.objects.get(id=approver_id)
 
-        cc_status = (od.status_cc or "PENDING").upper()
+        cc_status = (od.cc_status or "PENDING").upper()
         yc_status = (od.yc_status or "PENDING").upper()
 
         if cc_status == "REJECTED" or yc_status == "REJECTED":
@@ -299,12 +389,17 @@ def hod_od_action(request):
 
         if action == "APPROVED":
             od.final_status = "APPROVED"
-            send_status_email(od.student, "OD", "APPROVED")
         else:
             od.final_status = "REJECTED"
-            send_status_email(od.student, "OD", "REJECTED")
 
         od.save()
+
+        send_status_email(
+            od.student,
+            "OD",
+            od.final_status,
+            build_od_email_details(od)
+        )
 
         return JsonResponse({
             "status": "success",
@@ -391,12 +486,17 @@ def hod_lab_action(request):
 
         if action == "APPROVED":
             lab.final_status = "APPROVED"
-            send_status_email(lab.student, "Lab Access", "APPROVED")
         else:
             lab.final_status = "REJECTED"
-            send_status_email(lab.student, "Lab Access", "REJECTED")
 
         lab.save()
+
+        send_status_email(
+            lab.student,
+            "Lab Access",
+            lab.final_status,
+            build_lab_email_details(lab)
+        )
 
         return JsonResponse({
             "status": "success",
@@ -509,12 +609,17 @@ def security_hostel_action(request):
 
         if action == "APPROVED":
             hos.final_status = "APPROVED"
-            send_status_email(hos.student, "Hostel Outpass", "APPROVED")
         else:
             hos.final_status = "REJECTED"
-            send_status_email(hos.student, "Hostel Outpass", "REJECTED")
 
         hos.save()
+
+        send_status_email(
+            hos.student,
+            "Hostel Outpass",
+            hos.final_status,
+            build_hostel_email_details(hos)
+        )
 
         return JsonResponse({
             "status": "success",

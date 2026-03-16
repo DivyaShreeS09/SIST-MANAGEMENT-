@@ -1,0 +1,237 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>OD - Year Coordinator</title>
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}"/>
+  <script src="{% static 'js/app.js' %}?v=99"></script>
+ <script src="{% static 'js/common.js' %}?v=99"></script>
+</head>
+<body>
+<div class="container">
+  <div class="topbar">
+    <div class="brand">
+      <img src="{% static 'assets/logo.png' %}" alt="Logo">
+      <div class="title">
+        <b>SIST MANAGEMENT SYSTEM</b>
+        <span>OD Approval - Year Coordinator</span>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-ghost" data-theme-toggle onclick="toggleTheme()">Dark mode</button>
+      <span class="pill" id="who"></span>
+      <button class="btn btn-primary" onclick="signOut()">Sign Out</button>
+    </div>
+  </div>
+
+  <div style="height:16px"></div>
+
+  <div class="card">
+    <h2>OD Approval Dashboard</h2>
+
+    <div class="grid-2">
+      <div>
+        <label>Filter by Program</label>
+        <input id="fProgram" placeholder="e.g., B.E CSE AIML">
+      </div>
+      <div>
+        <label>Filter by Section</label>
+        <input id="fSection" placeholder="e.g., A1/A2">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div>
+        <label>Filter by Year</label>
+        <input id="fYear" placeholder="e.g., 1">
+      </div>
+      <div style="display:flex; gap:10px; align-items:flex-end;">
+        <button class="btn btn-ghost" id="applyBtn" type="button">Apply</button>
+        <button class="btn btn-primary" id="exportBtn" type="button">Export Approved List (PDF)</button>
+      </div>
+    </div>
+
+    <div class="hr"></div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Reg No</th>
+            <th>Name</th>
+            <th>Program</th>
+            <th>Section</th>
+            <th>Reason</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Proof</th>
+            <th>CC</th>
+            <th>YC</th>
+            <th>HOD</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  const user = requireAuth();
+  if (!user) throw new Error("No authenticated user found.");
+
+  updateThemeButtonText();
+
+  const displayName = user.name || user.full_name || user.username || "Year Coordinator";
+  document.getElementById("who").textContent = `YEAR COORDINATOR | ${displayName}`;
+
+  if (user.role !== "YEAR_COORDINATOR") {
+    alert("Unauthorized");
+    window.location.href = "/login.html";
+  }
+
+  const bodyEl = document.getElementById("body");
+  const fProgram = document.getElementById("fProgram");
+  const fSection = document.getElementById("fSection");
+  const fYear = document.getElementById("fYear");
+  const applyBtn = document.getElementById("applyBtn");
+  const exportBtn = document.getElementById("exportBtn");
+
+  const assignments = Array.isArray(user.assignments) ? user.assignments.filter(a => a.role === "YEAR_COORDINATOR") : [];
+  const allowedSections = Array.isArray(user.assigned_sections) ? user.assigned_sections : [];
+
+  if (assignments.length > 0) {
+    fProgram.value = assignments[0].program || "";
+    fYear.value = assignments[0].year || "";
+  }
+
+  function norm(val) {
+    return String(val || "").trim().toLowerCase();
+  }
+
+  function isVisibleToYC(r) {
+    return assignments.some(a =>
+      norm(a.program) === norm(r.program) &&
+      String(a.year) === String(r.year) &&
+      norm(a.section) === norm(r.section)
+    );
+  }
+
+  function matchesFilters(r) {
+    const yp = norm(fProgram.value);
+    const ys = norm(fSection.value);
+    const yy = String(fYear.value || "").trim();
+
+    const okP = !yp || norm(r.program).includes(yp);
+    const okS = !ys || norm(r.section).includes(ys);
+    const okY = !yy || String(r.year || "") === yy;
+
+    return okP && okS && okY;
+  }
+
+  function render() {
+    let list = DB.od();
+
+    list = list
+      .filter(r => isVisibleToYC(r))
+      .filter(r => matchesFilters(r));
+
+    bodyEl.innerHTML = list.length ? list.map(r => {
+      const ccyc = deriveCCYC(r);
+
+      const proofHtml = r.proofUrl
+        ? `<a href="${r.proofUrl}" target="_blank" class="btn btn-ghost">View Proof</a>`
+        : (r.proofName || "-");
+
+      const actionHtml =
+        (r.statusYC === "PENDING" && (r.statusHOD || "") !== "APPROVED" && ccyc !== "REJECTED")
+          ? `
+            <button class="btn btn-success" onclick="act('${r.id}','APPROVED')">Approve</button>
+            <button class="btn btn-danger" onclick="act('${r.id}','REJECTED')">Reject</button>
+          `
+          : `<span class="small">—</span>`;
+
+      return `
+        <tr>
+          <td>${r.regNo || "-"}</td>
+          <td>${r.studentName || "-"}</td>
+          <td>${r.program || "-"}</td>
+          <td>${r.section || "-"}</td>
+          <td>${r.reason || "-"}</td>
+          <td>${formatDT(r.fromDate, r.fromTime)}</td>
+          <td>${formatDT(r.toDate, r.toTime)}</td>
+          <td>${proofHtml}</td>
+          <td>${badge(r.statusCC || "PENDING")}</td>
+          <td>${badge(r.statusYC || "PENDING")}</td>
+          <td>${badge(r.statusHOD || "PENDING")}</td>
+          <td style="display:flex; gap:8px; flex-wrap:wrap;">${actionHtml}</td>
+        </tr>
+      `;
+    }).join("") : `<tr><td colspan="12">No requests found for your assigned sections (${allowedSections.join(", ") || "none"}).</td></tr>`;
+  }
+
+  async function act(id, status) {
+    try {
+      const res = await fetch("/api/od/yc-action/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          request_id: id,
+          action: status,
+          approver_id: user.id
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || "YC action failed.");
+        return;
+      }
+
+      const list = DB.od();
+      const r = list.find(x => String(x.id) === String(id));
+      if (r) {
+        r.statusYC = status;
+        r.ycBy = user.id;
+        r.ycByName = displayName;
+        r.timeline = r.timeline || [];
+        r.timeline.unshift({
+          at: new Date().toISOString(),
+          by: displayName,
+          action: `YC_${status}`
+        });
+
+        if (status === "REJECTED") {
+          r.finalStatus = "REJECTED";
+        }
+
+        DB.saveOD(list);
+      }
+
+      render();
+      alert(`Request ${status.toLowerCase()} successfully.`);
+    } catch (err) {
+      console.error(err);
+      alert("Server error while updating YC approval.");
+    }
+  }
+
+  applyBtn.onclick = render;
+
+  exportBtn.onclick = () => {
+    exportApprovedOD(user, {
+      year: fYear.value.trim(),
+      program: fProgram.value.trim(),
+      section: fSection.value.trim()
+    });
+  };
+
+  render();
+</script>
+</body>
+</html>

@@ -17,21 +17,16 @@ def safe_name(user_obj):
     return user_obj.full_name or user_obj.username or "—"
 
 
-def send_status_email(student, request_type, status_text, details_text):
+def send_status_email(student, request_type, status_text):
     if not student.email:
         return
 
     subject = f"{request_type} Request {status_text} - SIST Management System"
 
     message = f"""
-SATHYABAMA INSTITUTE OF SCIENCE AND TECHNOLOGY
-(DEEMED TO BE UNIVERSITY)
-
 Hello {student.full_name},
 
-Your {request_type} request has been {status_text}.
-
-{details_text}
+Your {request_type} request has been {status_text.lower()}.
 
 Please log in to the SIST Management System to view the latest status and download your approval letter if applicable.
 
@@ -39,13 +34,16 @@ Regards,
 SIST Management System
 """.strip()
 
-    send_mail(
-        subject,
-        message,
-        settings.DEFAULT_FROM_EMAIL,
-        [student.email],
-        fail_silently=False,
-    )
+    try:
+        send_mail(
+            subject,
+            message,
+            settings.DEFAULT_FROM_EMAIL,
+            [student.email],
+            fail_silently=False,
+        )
+    except Exception as e:
+        print("Email sending failed:", e)
 
 
 def build_od_email_details(od):

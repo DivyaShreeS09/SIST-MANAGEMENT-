@@ -7,7 +7,7 @@
   <title>OD - HOD</title>
   <link rel="stylesheet" href="{% static 'css/theme.css' %}"/>
   <script src="{% static 'js/app.js' %}?v=99"></script>
-  <script src="{% static 'js/common.js' %}?v=99"></script>">
+  <script src="{% static 'js/common.js' %}?v=99"></script>
 </head>
 <body>
 <div class="container">
@@ -24,6 +24,7 @@
       <button class="btn btn-ghost" data-theme-toggle onclick="toggleTheme()">Dark mode</button>
       <span class="pill" id="who"></span>
       <button class="btn btn-primary" onclick="signOut()">Sign Out</button>
+      <button class="btn btn-ghost" onclick="location.href='/admin_lab_hod.html'">Lab Approval</button>
     </div>
   </div>
 
@@ -48,8 +49,10 @@
         <label>Filter by Year</label>
         <input id="fYear" placeholder="e.g., 3">
       </div>
-      <div style="display:flex; gap:10px; align-items:flex-end;">
+      <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
         <button class="btn btn-ghost" id="applyBtn" type="button">Apply</button>
+        <div><label>Export From</label><input type="date" id="fFromDate"></div>
+        <div><label>Export To</label><input type="date" id="fToDate"></div>
         <button class="btn btn-primary" id="exportBtn" type="button">Export Approved List (PDF)</button>
       </div>
     </div>
@@ -104,6 +107,20 @@
   const applyBtn = document.getElementById("applyBtn");
   const exportBtn = document.getElementById("exportBtn");
 
+  let odData = [];
+
+  async function loadAndRender() {
+    try {
+      const res = await fetch("/api/od/all/");
+      const raw = await res.json();
+      odData = raw.map(r => ({ ...r, proofUrl: r.proof_url || "" }));
+    } catch (err) {
+      console.error("Failed to load OD requests:", err);
+      odData = [];
+    }
+    render();
+  }
+
   function matchesFilters(r) {
     const yp = fProgram.value.trim().toLowerCase();
     const ys = fSection.value.trim().toLowerCase();
@@ -117,7 +134,7 @@
   }
 
   function render() {
-    let list = DB.od();
+    let list = odData;
     list = list.filter(r => matchesFilters(r));
 
     bodyEl.innerHTML = list.length ? list.map(r => {
@@ -138,8 +155,8 @@
         actionHtml = `<span class="small">Rejected by HOD</span>`;
       } else if (canAct) {
         actionHtml = `
-          <button class="btn btn-success" onclick="act('${r.id}','APPROVED')">Approve</button>
-          <button class="btn btn-danger" onclick="act('${r.id}','REJECTED')">Reject</button>
+          <button class="btn btn-success" onclick="approveOD('${r.id}','APPROVED', this)">Approve</button>
+<button class="btn btn-danger" onclick="approveOD('${r.id}','REJECTED', this)">Reject</button>
         `;
       }
 
@@ -163,74 +180,59 @@
     }).join("") : `<tr><td colspan="13">No requests found.</td></tr>`;
   }
 
-  async function act(id, status) {
-    try {
-      const res = await fetch("/api/od/hod-action/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          request_id: id,
-          action: status,
-          approver_id: user.id
-        })
-      });
+ async function approveOD(requestId, action, btn) {
 
-      const data = await res.json();
+  if (btn.disabled) return;
 
-      if (!res.ok) {
-        alert(data.error || "HOD action failed.");
-        return;
-      }
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = "Processing...";
 
-      const list = DB.od();
-      const r = list.find(x => String(x.id) === String(id));
-      if (r) {
-        r.statusHOD = status;
-        r.hodBy = user.id;
-        r.hodByName = displayName;
-        r.timeline = r.timeline || [];
-        r.timeline.unshift({
-          at: new Date().toISOString(),
-          by: displayName,
-          action: `HOD_${status}`
-        });
+  try {
+    const res = await fetch("/api/od/hod-action/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        request_id: requestId,
+        action: action,
+        approver_id: currentUser().id
+      })
+    });
 
-        if (status === "APPROVED") {
-          r.finalStatus = "APPROVED";
-        } else if (status === "REJECTED") {
-          r.finalStatus = "REJECTED";
-        }
+    const data = await res.json();
 
-        DB.saveOD(list);
-      }
-
-      render();
-
-      if (status === "APPROVED") {
-        alert("Final approval done. Student can now download approval letter PDF.");
-      } else {
-        alert("Request rejected by HOD.");
-      }
-
-    } catch (err) {
-      console.error(err);
-      alert("Server error while updating HOD approval.");
+    if (!res.ok) {
+      alert(data.error || "Failed");
+      btn.disabled = false;
+      btn.textContent = originalText;
+      return;
     }
+
+    btn.textContent = "Done";
+    btn.style.background = "green";
+
+    await loadAndRender();
+
+  } catch (err) {
+    alert("Server error");
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
+}
 
   applyBtn.onclick = render;
 
   exportBtn.onclick = () => {
-    exportApprovedOD(user, {
+    exportApprovedOD(odData, {
       year: fYear.value.trim(),
       program: fProgram.value.trim(),
-      section: fSection.value.trim()
+      section: fSection.value.trim(),
+      fromDate: document.getElementById("fFromDate").value,
+      toDate: document.getElementById("fToDate").value,
     });
   };
 
-  render();
+  loadAndRender();
 </script>
 </body>
 </html>

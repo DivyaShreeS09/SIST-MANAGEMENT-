@@ -22,6 +22,7 @@ class ODRequest(models.Model):
     from_time = models.TimeField()
     to_time = models.TimeField()
     proof_file = models.FileField(upload_to='od_proofs/')
+    is_emergency = models.BooleanField(default=False)
 
     cc_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     yc_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')

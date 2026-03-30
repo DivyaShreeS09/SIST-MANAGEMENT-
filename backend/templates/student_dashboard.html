@@ -192,26 +192,40 @@
       return JSON.stringify(obj).replace(/"/g, '&quot;');
     }
 
-    const odList = DB.od().filter(r => String(r.studentId) === String(u.id));
     const labList = DB.lab().filter(r => String(r.studentId) === String(u.id));
     const hostelList = DB.hostel().filter(r => String(r.studentId) === String(u.id));
 
-    document.getElementById("odBody").innerHTML = odList.length ? odList.map(r => {
-      const finalOk = deriveCCYC(r) === "APPROVED" && (r.statusHOD || "") === "APPROVED";
-      return `
-      <tr>
-        <td>${r.reason || "-"}</td>
-        <td>${formatDT(r.fromDate, r.fromTime)}</td>
-        <td>${formatDT(r.toDate, r.toTime)}</td>
-        <td>${badge(r.statusCC || "PENDING")}</td>
-        <td>${badge(r.statusYC || "PENDING")}</td>
-        <td>${badge(r.statusHOD || "PENDING")}</td>
-        <td>
-          ${finalOk ? `<button class="btn btn-ghost" onclick="downloadODLetter(${safeAttr(r)})">Download</button>` : `<span class="small">—</span>`}
-        </td>
-      </tr>
-    `;
-    }).join("") : `<tr><td colspan="7">No OD requests yet.</td></tr>`;
+    async function loadODHistory() {
+      try {
+        const res = await fetch("/api/od/all/");
+        const raw = await res.json();
+        const odList = raw
+          .filter(r => String(r.studentId) === String(u.id))
+          .map(r => ({ ...r, proofUrl: r.proof_url || "" }));
+
+        document.getElementById("odBody").innerHTML = odList.length ? odList.map(r => {
+          const finalOk = deriveCCYC(r) === "APPROVED" && (r.statusHOD || "") === "APPROVED";
+          return `
+          <tr>
+            <td>${r.reason || "-"}</td>
+            <td>${formatDT(r.fromDate, r.fromTime)}</td>
+            <td>${formatDT(r.toDate, r.toTime)}</td>
+            <td>${badge(r.statusCC || "PENDING")}</td>
+            <td>${badge(r.statusYC || "PENDING")}</td>
+            <td>${badge(r.statusHOD || "PENDING")}</td>
+            <td>
+              ${finalOk ? `<button class="btn btn-ghost" onclick="downloadODLetter(${safeAttr(r)})">Download</button>` : `<span class="small">—</span>`}
+            </td>
+          </tr>
+        `;
+        }).join("") : `<tr><td colspan="7">No OD requests yet.</td></tr>`;
+      } catch (err) {
+        console.error("Failed to load OD history:", err);
+        document.getElementById("odBody").innerHTML = `<tr><td colspan="7">Failed to load OD requests.</td></tr>`;
+      }
+    }
+
+    loadODHistory();
 
     document.getElementById("labBody").innerHTML = labList.length ? labList.map(r => {
       const finalOk = (r.statusMENTOR || "") === "APPROVED" && (r.statusHOD || "") === "APPROVED";

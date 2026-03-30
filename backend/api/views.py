@@ -3,7 +3,10 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate
 from django.core.mail import send_mail
 from django.conf import settings
+from django.db import transaction
 import json
+
+from datetime import datetime, timedelta
 
 from accounts.models import User, ApproverAssignment
 from od.models import ODRequest
@@ -17,532 +20,472 @@ def safe_name(user_obj):
     return user_obj.full_name or user_obj.username or "—"
 
 
-def send_status_email(student, request_type, status_text, details_text):
+def send_status_email(student, request_type, status_text, extra_details=None):
     if not student.email:
         return
 
-    subject = f"{request_type} Request {status_text} - SIST Management System"
-
-    message = f"""
-SATHYABAMA INSTITUTE OF SCIENCE AND TECHNOLOGY
-(DEEMED TO BE UNIVERSITY)
-
+    try:
+        send_mail(
+            f"{request_type} Request {status_text}",
+            f"""
 Hello {student.full_name},
 
 Your {request_type} request has been {status_text}.
 
-{details_text}
-
-Please log in to the SIST Management System to view the latest status and download your approval letter if applicable.
+{extra_details or ""}
 
 Regards,
 SIST Management System
-""".strip()
-
-    send_mail(
-        subject,
-        message,
-        settings.DEFAULT_FROM_EMAIL,
-        [student.email],
-        fail_silently=False,
-    )
+""",
+            settings.DEFAULT_FROM_EMAIL,
+            [student.email],
+            fail_silently=True,  
+        )
+    except Exception as e:
+        print("Email failed:", e)
 
 
-def build_od_email_details(od):
-    return f"""
-Student Name: {od.student.full_name}
-Register Number: {od.student.register_no or od.student.username}
-Program: {od.student.program or "—"}
-Section: {od.student.section or "—"}
-Reason / Subject: {od.reason}
-From: {od.from_date} {od.from_time}
-To: {od.to_date} {od.to_time}
+def get_all_od_requests(request):
+    od_list = ODRequest.objects.select_related(
+        "student", "cc_action_by", "yc_action_by", "hod_action_by"
+    ).order_by("to_date", "-created_at")
 
-Approval Details:
-Class Coordinator: {safe_name(od.cc_action_by)}
-Year Coordinator: {safe_name(od.yc_action_by)}
-HOD: {safe_name(od.hod_action_by)}
-
-Final Status: {od.final_status}
-""".strip()
-
-
-def build_lab_email_details(lab):
-    return f"""
-Student Name: {lab.student.full_name}
-Register Number: {lab.student.register_no or lab.student.username}
-Program: {lab.student.program or "—"}
-Section: {lab.student.section or "—"}
-Lab: {lab.lab_name}
-Reason: {lab.reason}
-From: {lab.from_date} {lab.from_time}
-To: {lab.to_date} {lab.to_time}
-
-Approval Details:
-Mentor: {safe_name(lab.mentor_action_by)}
-HOD: {safe_name(lab.hod_action_by)}
-
-Final Status: {lab.final_status}
-""".strip()
-
-
-def build_hostel_email_details(hos):
-    return f"""
-Student Name: {hos.student.full_name}
-Register Number: {hos.student.register_no or hos.student.username}
-Program: {hos.student.program or "—"}
-Section: {hos.student.section or "—"}
-Purpose: {hos.purpose}
-From: {hos.from_date} {hos.from_time}
-To: {hos.to_date} {hos.to_time}
-
-Approval Details:
-Chief Warden: {safe_name(hos.chief_action_by)}
-Warden: {safe_name(hos.warden_action_by)}
-Security: {safe_name(hos.security_action_by)}
-
-Final Status: {hos.final_status}
-""".strip()
-
-
-@csrf_exempt
-def login_view(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Only POST allowed"}, status=405)
-
-    try:
-        data = json.loads(request.body)
-        username = data.get("username", "").strip()
-        password = data.get("password", "").strip()
-        role = data.get("role", "").strip()
-    except Exception:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-    user = authenticate(username=username, password=password)
-    if not user:
-        return JsonResponse({"error": "Invalid credentials"}, status=401)
-
-    if role and user.role != role:
-        return JsonResponse({"error": "Role mismatch"}, status=403)
-
-    assignments_qs = ApproverAssignment.objects.filter(approver=user)
-
-    assignments = []
-    sections = []
-
-    for a in assignments_qs:
-        assignments.append({
-            "role": a.role,
-            "program": a.program,
-            "year": a.year,
-            "section": a.section,
+    data = []
+    for od in od_list:
+        data.append({
+            "id": od.id,
+            "studentId": od.student.id,
+            "regNo": od.student.register_no,
+            "studentName": od.student.full_name,
+            "program": od.student.program,
+            "section": od.student.section,
+            "year": od.student.year,
+            "dept": od.student.department,
+            "reason": od.reason,
+            "fromDate": str(od.from_date),
+            "toDate": str(od.to_date),
+            "fromTime": str(od.from_time),
+            "toTime": str(od.to_time),
+            "proof_url": od.proof_file.url if od.proof_file else "",
+            "statusCC": od.cc_status,
+            "statusYC": od.yc_status,
+            "statusHOD": od.hod_status,
+            "finalStatus": od.final_status,
+            "createdAt": str(od.created_at),
+            "ccByName": od.cc_action_by.full_name if od.cc_action_by else "Pending",
+            "ycByName": od.yc_action_by.full_name if od.yc_action_by else "Pending",
+            "hodByName": od.hod_action_by.full_name if od.hod_action_by else "Pending",
         })
-        if a.section:
-            sections.append(a.section)
 
-    return JsonResponse({
-        "status": "success",
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "name": user.full_name,
-            "role": user.role,
-            "program": user.program,
-            "section": user.section,
-            "year": user.year,
-            "dept": user.department,
-            "hosteller": user.hosteller,
-            "email": user.email,
-            "assigned_sections": sections,
-            "assignments": assignments,
-        }
-    })
+    return JsonResponse(data, safe=False)
 
 
 @csrf_exempt
 def create_od_request(request):
     if request.method != "POST":
-        return JsonResponse({"error": "Only POST allowed"}, status=405)
+        return JsonResponse({"error": "Only POST"}, status=405)
 
     try:
-        student_id = request.POST.get("student_id")
-        reason = request.POST.get("reason")
-        from_date = request.POST.get("from_date")
-        to_date = request.POST.get("to_date")
-        from_time = request.POST.get("from_time")
-        to_time = request.POST.get("to_time")
-        proof_file = request.FILES.get("proof_file")
+        student = User.objects.get(id=request.POST.get("student_id"))
 
-        student = User.objects.get(id=student_id)
+        from_date = request.POST.get("from_date")
+        from_time = request.POST.get("from_time")
+        is_emergency = request.POST.get("is_emergency") == "true"
+
+        now = datetime.now()
+        od_time = datetime.strptime(f"{from_date} {from_time}", "%Y-%m-%d %H:%M")
+
+        if not is_emergency and (od_time - now < timedelta(hours=12)):
+            return JsonResponse({
+                "error": "OD must be applied 12 hours before OR mark as Emergency"
+            }, status=400)
 
         od = ODRequest.objects.create(
             student=student,
-            reason=reason,
+            reason=request.POST.get("reason"),
             from_date=from_date,
-            to_date=to_date,
+            to_date=request.POST.get("to_date"),
             from_time=from_time,
-            to_time=to_time,
-            proof_file=proof_file,
+            to_time=request.POST.get("to_time"),
+            proof_file=request.FILES.get("proof_file"),
+            is_emergency=is_emergency
         )
+
+        # 🚨 EMERGENCY EMAIL
+        if is_emergency:
+            approvers = ApproverAssignment.objects.filter(program=student.program)
+
+            emails = list(set([
+                a.approver.email for a in approvers if a.approver.email
+            ]))
+
+            send_mail(
+                "🚨 Emergency OD Request",
+                f"""Emergency OD Request
+
+Student      : {student.full_name}
+Register No  : {student.register_no}
+Program      : {student.program} | Year: {student.year} | Section: {student.section}
+Reason       : {od.reason}
+From         : {from_date} {from_time}
+To           : {od.to_date} {od.to_time}
+
+You are receiving this as an approver for {student.program}.
+
+Please review this OD request on the system immediately.
+
+Regards,
+SIST Management System""",
+                settings.DEFAULT_FROM_EMAIL,
+                emails,
+                fail_silently=True
+            )
 
         return JsonResponse({
             "status": "success",
             "id": od.id,
-            "proof_url": od.proof_file.url if od.proof_file else "",
-            "proof_name": od.proof_file.name.split("/")[-1] if od.proof_file else "",
+            "proof_url": od.proof_file.url if od.proof_file else ""
         })
 
-    except User.DoesNotExist:
-        return JsonResponse({"error": "Student not found"}, status=404)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
-
-
-@csrf_exempt
-def create_lab_request(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Only POST allowed"}, status=405)
-
-    try:
-        student_id = request.POST.get("student_id")
-        lab_name = request.POST.get("lab")
-        reason = request.POST.get("reason")
-        from_date = request.POST.get("from_date")
-        to_date = request.POST.get("to_date")
-        from_time = request.POST.get("from_time")
-        to_time = request.POST.get("to_time")
-        proof_file = request.FILES.get("proof_file")
-
-        student = User.objects.get(id=student_id)
-
-        lab = LabRequest.objects.create(
-            student=student,
-            lab_name=lab_name,
-            reason=reason,
-            from_date=from_date,
-            to_date=to_date,
-            from_time=from_time,
-            to_time=to_time,
-            proof_file=proof_file,
-        )
-
-        return JsonResponse({
-            "status": "success",
-            "id": lab.id,
-            "proof_url": lab.proof_file.url if lab.proof_file else "",
-            "proof_name": lab.proof_file.name.split("/")[-1] if lab.proof_file else "",
-        })
-
-    except User.DoesNotExist:
-        return JsonResponse({"error": "Student not found"}, status=404)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
-
-
-@csrf_exempt
-def create_hostel_request(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Only POST allowed"}, status=405)
-
-    try:
-        student_id = request.POST.get("student_id")
-        purpose = request.POST.get("purpose")
-        from_date = request.POST.get("from_date")
-        to_date = request.POST.get("to_date")
-        from_time = request.POST.get("from_time")
-        to_time = request.POST.get("to_time")
-        proof_file = request.FILES.get("proof_file")
-
-        student = User.objects.get(id=student_id)
-
-        hos = HostelOutpassRequest.objects.create(
-            student=student,
-            purpose=purpose,
-            from_date=from_date,
-            to_date=to_date,
-            from_time=from_time,
-            to_time=to_time,
-            proof_file=proof_file,
-        )
-
-        return JsonResponse({
-            "status": "success",
-            "id": hos.id,
-            "proof_url": hos.proof_file.url if hos.proof_file else "",
-            "proof_name": hos.proof_file.name.split("/")[-1] if hos.proof_file else "",
-        })
-
-    except User.DoesNotExist:
-        return JsonResponse({"error": "Student not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
 
 @csrf_exempt
 def cc_od_action(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Only POST allowed"}, status=405)
-
     try:
+        print("CC ACTION - body:", request.body)
         data = json.loads(request.body)
+
         request_id = data.get("request_id")
-        action = data.get("action", "").upper()
+        action = data.get("action")
         approver_id = data.get("approver_id")
 
-        if action not in ["APPROVED", "REJECTED"]:
-            return JsonResponse({"error": "Invalid action"}, status=400)
+        if not request_id or not action:
+            return JsonResponse({"error": "Missing request_id or action"}, status=400)
 
-        od = ODRequest.objects.get(id=request_id)
-        approver = User.objects.get(id=approver_id)
+        with transaction.atomic():
+            od = ODRequest.objects.select_for_update().get(id=request_id)
 
-        od.cc_status = action
-        od.cc_action_by = approver
+            if od.cc_status != "PENDING":
+                return JsonResponse({"error": "Already processed"}, status=400)
 
-        if action == "REJECTED":
-            od.final_status = "REJECTED"
+            od.cc_status = action
+            od.cc_action_by_id = approver_id
 
-        od.save()
+            if action == "REJECTED":
+                od.final_status = "REJECTED"
 
-        return JsonResponse({
-            "status": "success",
-            "request_id": od.id,
-            "cc_status": od.cc_status,
-            "final_status": od.final_status
-        })
+            od.save()
+
+        return JsonResponse({"status": "success"})
 
     except ODRequest.DoesNotExist:
-        return JsonResponse({"error": "OD request not found"}, status=404)
-    except User.DoesNotExist:
-        return JsonResponse({"error": "Approver not found"}, status=404)
+        return JsonResponse({"error": "OD request not found in database"}, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON body"}, status=400)
     except Exception as e:
+        print("CC ACTION ERROR:", str(e))
         return JsonResponse({"error": str(e)}, status=400)
+
 
 
 @csrf_exempt
 def yc_od_action(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Only POST allowed"}, status=405)
-
     try:
+        print("YC ACTION - body:", request.body)
         data = json.loads(request.body)
+
         request_id = data.get("request_id")
-        action = data.get("action", "").upper()
+        action = data.get("action")
         approver_id = data.get("approver_id")
 
-        if action not in ["APPROVED", "REJECTED"]:
-            return JsonResponse({"error": "Invalid action"}, status=400)
+        if not request_id or not action:
+            return JsonResponse({"error": "Missing request_id or action"}, status=400)
 
-        od = ODRequest.objects.get(id=request_id)
-        approver = User.objects.get(id=approver_id)
+        with transaction.atomic():
+            od = ODRequest.objects.select_for_update().get(id=request_id)
 
-        od.yc_status = action
-        od.yc_action_by = approver
+            if od.yc_status != "PENDING":
+                return JsonResponse({"error": "Already processed"}, status=400)
 
-        if action == "REJECTED":
-            od.final_status = "REJECTED"
+            od.yc_status = action
+            od.yc_action_by_id = approver_id
 
-        od.save()
+            if action == "REJECTED":
+                od.final_status = "REJECTED"
 
-        return JsonResponse({
-            "status": "success",
-            "request_id": od.id,
-            "yc_status": od.yc_status,
-            "final_status": od.final_status
-        })
+            od.save()
+
+        return JsonResponse({"status": "success"})
 
     except ODRequest.DoesNotExist:
-        return JsonResponse({"error": "OD request not found"}, status=404)
-    except User.DoesNotExist:
-        return JsonResponse({"error": "Approver not found"}, status=404)
+        return JsonResponse({"error": "OD request not found in database"}, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON body"}, status=400)
     except Exception as e:
+        print("YC ACTION ERROR:", str(e))
         return JsonResponse({"error": str(e)}, status=400)
 
 
 @csrf_exempt
 def hod_od_action(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Only POST allowed"}, status=405)
-
     try:
         data = json.loads(request.body)
-        request_id = data.get("request_id")
-        action = data.get("action", "").upper()
-        approver_id = data.get("approver_id")
 
-        if action not in ["APPROVED", "REJECTED"]:
-            return JsonResponse({"error": "Invalid action"}, status=400)
+        with transaction.atomic():
+            od = ODRequest.objects.select_for_update().get(id=data["request_id"])
 
-        od = ODRequest.objects.get(id=request_id)
-        approver = User.objects.get(id=approver_id)
+           
+            if od.hod_status != "PENDING":
+                return JsonResponse({"error": "Already processed"}, status=400)
 
-        cc_status = (od.cc_status or "PENDING").upper()
-        yc_status = (od.yc_status or "PENDING").upper()
+            if od.cc_status == "REJECTED" or od.yc_status == "REJECTED":
+                return JsonResponse({"error": "Already rejected"}, status=400)
 
-        if cc_status == "REJECTED" or yc_status == "REJECTED":
-            return JsonResponse({"error": "Cannot act because CC/YC already rejected"}, status=400)
+            if not (od.cc_status == "APPROVED" or od.yc_status == "APPROVED"):
+                return JsonResponse({"error": "CC/YC approval required"}, status=400)
 
-        if not (cc_status == "APPROVED" or yc_status == "APPROVED"):
-            return JsonResponse({"error": "Cannot act before CC/YC approval"}, status=400)
+            od.hod_status = data["action"]
+            od.hod_action_by_id = data["approver_id"]
 
-        od.hod_status = action
-        od.hod_action_by = approver
+            od.final_status = "APPROVED" if data["action"] == "APPROVED" else "REJECTED"
 
-        if action == "APPROVED":
-            od.final_status = "APPROVED"
-        else:
-            od.final_status = "REJECTED"
+            od.save()
 
-        od.save()
-
+       
         send_status_email(
             od.student,
             "OD",
             od.final_status,
-            build_od_email_details(od)
+            extra_details=f"""Register No  : {od.student.register_no}
+Program      : {od.student.program} | Year: {od.student.year} | Section: {od.student.section}
+Reason       : {od.reason}
+From         : {od.from_date} {od.from_time}
+To           : {od.to_date} {od.to_time}
+
+Please log in to the SIST Management System to view your OD letter."""
+        )
+
+        return JsonResponse({"status": "success"})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@csrf_exempt
+def login_view(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Only POST"}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        username = data.get("username", "").strip()
+        password = data.get("password", "")
+        role = data.get("role", "").strip()
+
+        user = authenticate(username=username, password=password)
+
+        if user is None:
+            return JsonResponse({"error": "Invalid credentials"}, status=401)
+
+        if user.role != role:
+            return JsonResponse({"error": "Role mismatch"}, status=403)
+
+        user_assignments = list(
+            ApproverAssignment.objects.filter(approver=user)
+            .values("role", "program", "year", "section")
+        )
+
+        return JsonResponse({
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "full_name": user.full_name,
+                "role": user.role,
+                "register_no": user.register_no,
+                "program": user.program,
+                "section": user.section,
+                "year": user.year,
+                "department": user.department,
+                "hosteller": user.hosteller,
+                "assignments": user_assignments,
+            }
+        })
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+# ---------------------------------------------------------------------------
+# DEBUG
+# ---------------------------------------------------------------------------
+
+def reset_corrupted_cc_status(_request):
+    yc_users = User.objects.filter(role="YEAR_COORDINATOR").values_list("id", flat=True)
+
+    affected = ODRequest.objects.filter(
+        cc_status__in=["APPROVED", "REJECTED"],
+        cc_action_by_id__in=yc_users
+    )
+
+    count = affected.count()
+
+    affected.update(
+        cc_status="PENDING",
+        cc_action_by=None
+    )
+
+    return JsonResponse({
+        "message": "Reset complete",
+        "affected": count
+    })
+
+
+# ---------------------------------------------------------------------------
+# LAB
+# ---------------------------------------------------------------------------
+
+@csrf_exempt
+def create_lab_request(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Only POST"}, status=405)
+
+    try:
+        student = User.objects.get(id=request.POST.get("student_id"))
+
+        lab = LabRequest.objects.create(
+            student=student,
+            lab_name=request.POST.get("lab"),
+            reason=request.POST.get("reason"),
+            from_date=request.POST.get("from_date"),
+            to_date=request.POST.get("to_date"),
+            from_time=request.POST.get("from_time"),
+            to_time=request.POST.get("to_time"),
+            proof_file=request.FILES.get("proof_file"),
         )
 
         return JsonResponse({
             "status": "success",
-            "request_id": od.id,
-            "hod_status": od.hod_status,
-            "final_status": od.final_status
+            "id": lab.id,
+            "proof_url": lab.proof_file.url if lab.proof_file else "",
         })
 
-    except ODRequest.DoesNotExist:
-        return JsonResponse({"error": "OD request not found"}, status=404)
-    except User.DoesNotExist:
-        return JsonResponse({"error": "Approver not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
 
 @csrf_exempt
 def mentor_lab_action(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Only POST allowed"}, status=405)
-
     try:
         data = json.loads(request.body)
-        request_id = data.get("request_id")
-        action = data.get("action", "").upper()
-        approver_id = data.get("approver_id")
 
-        if action not in ["APPROVED", "REJECTED"]:
-            return JsonResponse({"error": "Invalid action"}, status=400)
+        with transaction.atomic():
+            lab = LabRequest.objects.select_for_update().get(id=data["request_id"])
 
-        lab = LabRequest.objects.get(id=request_id)
-        approver = User.objects.get(id=approver_id)
+            if lab.mentor_status != "PENDING":
+                return JsonResponse({"error": "Already processed"}, status=400)
 
-        lab.mentor_status = action
-        lab.mentor_action_by = approver
+            lab.mentor_status = data["action"]
+            lab.mentor_action_by_id = data["approver_id"]
 
-        if action == "REJECTED":
-            lab.final_status = "REJECTED"
+            if data["action"] == "REJECTED":
+                lab.final_status = "REJECTED"
 
-        lab.save()
+            lab.save()
 
-        return JsonResponse({
-            "status": "success",
-            "request_id": lab.id,
-            "mentor_status": lab.mentor_status,
-            "final_status": lab.final_status
-        })
+        return JsonResponse({"status": "success"})
 
-    except LabRequest.DoesNotExist:
-        return JsonResponse({"error": "Lab request not found"}, status=404)
-    except User.DoesNotExist:
-        return JsonResponse({"error": "Approver not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
 
 @csrf_exempt
 def hod_lab_action(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Only POST allowed"}, status=405)
-
     try:
         data = json.loads(request.body)
-        request_id = data.get("request_id")
-        action = data.get("action", "").upper()
-        approver_id = data.get("approver_id")
 
-        if action not in ["APPROVED", "REJECTED"]:
-            return JsonResponse({"error": "Invalid action"}, status=400)
+        with transaction.atomic():
+            lab = LabRequest.objects.select_for_update().get(id=data["request_id"])
 
-        lab = LabRequest.objects.get(id=request_id)
-        approver = User.objects.get(id=approver_id)
+            if lab.hod_status != "PENDING":
+                return JsonResponse({"error": "Already processed"}, status=400)
 
-        mentor_status = (lab.mentor_status or "PENDING").upper()
+            if lab.mentor_status == "REJECTED":
+                return JsonResponse({"error": "Already rejected by mentor"}, status=400)
 
-        if mentor_status == "REJECTED":
-            return JsonResponse({"error": "Cannot act because mentor already rejected"}, status=400)
+            if lab.mentor_status != "APPROVED":
+                return JsonResponse({"error": "Mentor approval required"}, status=400)
 
-        if mentor_status != "APPROVED":
-            return JsonResponse({"error": "Cannot act before mentor approval"}, status=400)
+            lab.hod_status = data["action"]
+            lab.hod_action_by_id = data["approver_id"]
+            lab.final_status = "APPROVED" if data["action"] == "APPROVED" else "REJECTED"
 
-        lab.hod_status = action
-        lab.hod_action_by = approver
+            lab.save()
 
-        if action == "APPROVED":
-            lab.final_status = "APPROVED"
-        else:
-            lab.final_status = "REJECTED"
+        send_status_email(lab.student, "Lab", lab.final_status)
 
-        lab.save()
+        return JsonResponse({"status": "success"})
 
-        send_status_email(
-            lab.student,
-            "Lab Access",
-            lab.final_status,
-            build_lab_email_details(lab)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+# ---------------------------------------------------------------------------
+# HOSTEL
+# ---------------------------------------------------------------------------
+
+@csrf_exempt
+def create_hostel_request(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Only POST"}, status=405)
+
+    try:
+        student = User.objects.get(id=request.POST.get("student_id"))
+
+        hos = HostelOutpassRequest.objects.create(
+            student=student,
+            purpose=request.POST.get("purpose"),
+            from_date=request.POST.get("from_date"),
+            to_date=request.POST.get("to_date"),
+            from_time=request.POST.get("from_time"),
+            to_time=request.POST.get("to_time"),
+            proof_file=request.FILES.get("proof_file"),
         )
 
         return JsonResponse({
             "status": "success",
-            "request_id": lab.id,
-            "hod_status": lab.hod_status,
-            "final_status": lab.final_status
+            "id": hos.id,
+            "proof_url": hos.proof_file.url if hos.proof_file else "",
+            "proof_name": hos.proof_file.name if hos.proof_file else "",
         })
 
-    except LabRequest.DoesNotExist:
-        return JsonResponse({"error": "Lab request not found"}, status=404)
-    except User.DoesNotExist:
-        return JsonResponse({"error": "Approver not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
 
 @csrf_exempt
 def chief_hostel_action(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Only POST allowed"}, status=405)
-
     try:
         data = json.loads(request.body)
 
-        request_id = data.get("request_id")
-        action = data.get("action").upper()
-        approver_id = data.get("approver_id")
+        with transaction.atomic():
+            hos = HostelOutpassRequest.objects.select_for_update().get(id=data["request_id"])
 
-        hos = HostelOutpassRequest.objects.get(id=request_id)
-        approver = User.objects.get(id=approver_id)
+            if hos.chief_status != "PENDING":
+                return JsonResponse({"error": "Already processed"}, status=400)
 
-        hos.chief_status = action
-        hos.chief_action_by = approver
+            hos.chief_status = data["action"]
+            hos.chief_action_by_id = data["approver_id"]
 
-        if action == "APPROVED":
-            hos.warden_status = "PENDING"
+            if data["action"] == "APPROVED":
+                hos.warden_status = "PENDING"
+            else:
+                hos.final_status = "REJECTED"
 
-        if action == "REJECTED":
-            hos.final_status = "REJECTED"
+            hos.save()
 
-        hos.save()
-
-        return JsonResponse({
-            "status": "success",
-            "chief_status": hos.chief_status
-        })
+        return JsonResponse({"status": "success"})
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
@@ -550,37 +493,29 @@ def chief_hostel_action(request):
 
 @csrf_exempt
 def warden_hostel_action(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Only POST allowed"}, status=405)
-
     try:
         data = json.loads(request.body)
 
-        request_id = data.get("request_id")
-        action = data.get("action").upper()
-        approver_id = data.get("approver_id")
+        with transaction.atomic():
+            hos = HostelOutpassRequest.objects.select_for_update().get(id=data["request_id"])
 
-        hos = HostelOutpassRequest.objects.get(id=request_id)
-        approver = User.objects.get(id=approver_id)
+            if hos.warden_status != "PENDING":
+                return JsonResponse({"error": "Already processed"}, status=400)
 
-        if hos.chief_status != "APPROVED":
-            return JsonResponse({"error": "Chief Warden approval required"}, status=400)
+            if hos.chief_status != "APPROVED":
+                return JsonResponse({"error": "Chief approval required"}, status=400)
 
-        hos.warden_status = action
-        hos.warden_action_by = approver
+            hos.warden_status = data["action"]
+            hos.warden_action_by_id = data["approver_id"]
 
-        if action == "APPROVED":
-            hos.security_status = "PENDING"
+            if data["action"] == "APPROVED":
+                hos.security_status = "PENDING"
+            else:
+                hos.final_status = "REJECTED"
 
-        if action == "REJECTED":
-            hos.final_status = "REJECTED"
+            hos.save()
 
-        hos.save()
-
-        return JsonResponse({
-            "status": "success",
-            "warden_status": hos.warden_status
-        })
+        return JsonResponse({"status": "success"})
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
@@ -588,44 +523,27 @@ def warden_hostel_action(request):
 
 @csrf_exempt
 def security_hostel_action(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Only POST allowed"}, status=405)
-
     try:
         data = json.loads(request.body)
 
-        request_id = data.get("request_id")
-        action = data.get("action").upper()
-        approver_id = data.get("approver_id")
+        with transaction.atomic():
+            hos = HostelOutpassRequest.objects.select_for_update().get(id=data["request_id"])
 
-        hos = HostelOutpassRequest.objects.get(id=request_id)
-        approver = User.objects.get(id=approver_id)
+            if hos.security_status != "PENDING":
+                return JsonResponse({"error": "Already processed"}, status=400)
 
-        if hos.warden_status != "APPROVED":
-            return JsonResponse({"error": "Warden approval required"}, status=400)
+            if hos.warden_status != "APPROVED":
+                return JsonResponse({"error": "Warden approval required"}, status=400)
 
-        hos.security_status = action
-        hos.security_action_by = approver
+            hos.security_status = data["action"]
+            hos.security_action_by_id = data["approver_id"]
+            hos.final_status = "APPROVED" if data["action"] == "APPROVED" else "REJECTED"
 
-        if action == "APPROVED":
-            hos.final_status = "APPROVED"
-        else:
-            hos.final_status = "REJECTED"
+            hos.save()
 
-        hos.save()
+        send_status_email(hos.student, "Hostel Outpass", hos.final_status)
 
-        send_status_email(
-            hos.student,
-            "Hostel Outpass",
-            hos.final_status,
-            build_hostel_email_details(hos)
-        )
-
-        return JsonResponse({
-            "status": "success",
-            "security_status": hos.security_status,
-            "final_status": hos.final_status
-        })
+        return JsonResponse({"status": "success"})
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)

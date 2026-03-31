@@ -117,7 +117,7 @@
 
     async function loadAndRender() {
       try {
-        const res = await fetch("/api/od/all/");
+        const res = await fetch("/api/od/all/?approver_id=" + user.id);
         const raw = await res.json();
         odData = raw.map(r => ({ ...r, proofUrl: r.proof_url || "" }));
       } catch (err) {
@@ -151,12 +151,22 @@
       return okP && okS && okY;
     }
 
-    function render() {
-      let list = odData;
+    // Sort: pending + expiring soonest first, then pending later, then closed
+    function sortByPriority(list) {
+      return list.slice().sort((a, b) => {
+        const aActive = (a.finalStatus || "PENDING") === "PENDING";
+        const bActive = (b.finalStatus || "PENDING") === "PENDING";
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        if (aActive && bActive) return (a.toDate || "").localeCompare(b.toDate || "");
+        return 0;
+      });
+    }
 
-      list = list
-        .filter(r => isVisibleToCC(r))
-        .filter(r => matchesFilters(r));
+    function render() {
+      let list = sortByPriority(
+        odData.filter(r => isVisibleToCC(r)).filter(r => matchesFilters(r))
+      );
 
       bodyEl.innerHTML = list.length ? list.map(r => {
         const proofHtml = r.proofUrl
@@ -233,10 +243,9 @@
     applyBtn.onclick = render;
 
     exportBtn.onclick = () => {
-      exportApprovedOD(odData, {
-        year: fYear.value.trim(),
-        program: fProgram.value.trim(),
-        section: fSection.value.trim(),
+      // Scope export to CC's assigned sections only
+      const scopedData = odData.filter(r => isVisibleToCC(r));
+      exportApprovedOD(scopedData, {
         fromDate: document.getElementById("fFromDate").value,
         toDate: document.getElementById("fToDate").value,
       });

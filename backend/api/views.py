@@ -4,7 +4,9 @@ from django.contrib.auth import authenticate
 from django.core.mail import send_mail
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 import json
+import threading
 
 from datetime import datetime, timedelta
 
@@ -20,35 +22,93 @@ def safe_name(user_obj):
     return user_obj.full_name or user_obj.username or "—"
 
 
+def send_od_approval_email(student, od, cc_name, yc_name, hod_name, final_status):
+    """Send a structured OD approval/rejection email to the student."""
+    if not student.email:
+        return
+    status_word = "APPROVED" if final_status == "APPROVED" else "REJECTED"
+    subject = f"OD Request {status_word} – SIST Management System"
+    body = f"""Hello {student.full_name},
+
+Your OD request has been {status_word}.
+
+Student Details:
+  Name        : {student.full_name}
+  Register No : {student.register_no}
+  Program     : {student.program}
+  Section     : {student.section}
+
+OD Details:
+  Reason : {od.reason}
+  From   : {od.from_date}  {od.from_time}
+  To     : {od.to_date}  {od.to_time}
+
+Approvals:
+  Class Coordinator : {cc_name}
+  Year Coordinator  : {yc_name}
+  HOD               : {hod_name}
+
+Final Status : {status_word}
+
+{"Please log in to the SIST Management System to download your OD letter." if final_status == "APPROVED" else "Please contact your Class Coordinator for further assistance."}
+
+Regards,
+SIST Management System"""
+    try:
+        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [student.email], fail_silently=True)
+    except Exception as e:
+        print("OD email failed:", e)
+
+
 def send_status_email(student, request_type, status_text, extra_details=None):
+    """Generic status email used for Lab and Hostel requests."""
     if not student.email:
         return
 
     try:
         send_mail(
             f"{request_type} Request {status_text}",
-            f"""
-Hello {student.full_name},
+            f"""Hello {student.full_name},
 
 Your {request_type} request has been {status_text}.
 
 {extra_details or ""}
 
 Regards,
-SIST Management System
-""",
+SIST Management System""",
             settings.DEFAULT_FROM_EMAIL,
             [student.email],
-            fail_silently=True,  
+            fail_silently=True,
         )
     except Exception as e:
         print("Email failed:", e)
 
 
 def get_all_od_requests(request):
-    od_list = ODRequest.objects.select_related(
+    od_qs = ODRequest.objects.select_related(
         "student", "cc_action_by", "yc_action_by", "hod_action_by"
-    ).order_by("to_date", "-created_at")
+    )
+
+    # Filter by approver's assignments when approver_id is provided.
+    # Student dashboard calls without approver_id and gets all records (backward compat).
+    approver_id = request.GET.get("approver_id", "").strip()
+    if approver_id:
+        assignments = ApproverAssignment.objects.filter(approver_id=approver_id)
+        if assignments.exists():
+            q = Q()
+            for a in assignments:
+                cond = Q(student__program__iexact=a.program)
+                if a.year:
+                    cond &= Q(student__year=str(a.year))
+                if a.section:
+                    cond &= Q(student__section__iexact=a.section)
+                q |= cond
+            od_qs = od_qs.filter(q)
+        else:
+            od_qs = od_qs.none()
+
+    # Newest first — student sees latest requests at top; approver dashboards re-sort in JS
+    od_list = od_qs.order_by("-created_at")
 
     data = []
     for od in od_list:
@@ -111,35 +171,52 @@ def create_od_request(request):
             is_emergency=is_emergency
         )
 
-        # 🚨 EMERGENCY EMAIL
+        # EMERGENCY EMAIL — only assigned CC/YC/HOD for this student's program+year+section
         if is_emergency:
-            approvers = ApproverAssignment.objects.filter(program=student.program)
+            approvers_list = list(
+                ApproverAssignment.objects.filter(
+                    program=student.program,
+                    year=student.year,
+                    section=student.section,
+                    role__in=["CLASS_COORDINATOR", "YEAR_COORDINATOR"]
+                ).select_related("approver")
+            )
 
-            emails = list(set([
-                a.approver.email for a in approvers if a.approver.email
-            ]))
+            # Snapshot values needed so the thread needs no DB access
+            student_name = student.full_name
+            student_reg  = student.register_no
+            student_sec  = student.section
+            od_reason    = od.reason
+            od_to_date   = str(od.to_date)
+            od_to_time   = str(od.to_time)
 
-            send_mail(
-                "🚨 Emergency OD Request",
-                f"""Emergency OD Request
+            def _send_emergency():
+                for a in approvers_list:
+                    if not a.approver.email:
+                        continue
+                    send_mail(
+                        "URGENT OD Request – Action Required",
+                        f"""Hello {safe_name(a.approver)},
 
-Student      : {student.full_name}
-Register No  : {student.register_no}
-Program      : {student.program} | Year: {student.year} | Section: {student.section}
-Reason       : {od.reason}
-From         : {from_date} {from_time}
-To           : {od.to_date} {od.to_time}
+A new OD request requires your approval.
 
-You are receiving this as an approver for {student.program}.
+Student     : {student_name}
+Register No : {student_reg}
+Section     : {student_sec}
+Reason      : {od_reason}
+From        : {from_date}  {from_time}
+To          : {od_to_date}  {od_to_time}
 
-Please review this OD request on the system immediately.
+Please log in to the system to review and take action.
 
 Regards,
 SIST Management System""",
-                settings.DEFAULT_FROM_EMAIL,
-                emails,
-                fail_silently=True
-            )
+                        settings.DEFAULT_FROM_EMAIL,
+                        [a.approver.email],
+                        fail_silently=True,
+                    )
+
+            threading.Thread(target=_send_emergency, daemon=True).start()
 
         return JsonResponse({
             "status": "success",
@@ -167,6 +244,9 @@ def cc_od_action(request):
         with transaction.atomic():
             od = ODRequest.objects.select_for_update().get(id=request_id)
 
+            if od.final_status == "REJECTED":
+                return JsonResponse({"error": "Already rejected"}, status=400)
+
             if od.cc_status != "PENDING":
                 return JsonResponse({"error": "Already processed"}, status=400)
 
@@ -177,6 +257,56 @@ def cc_od_action(request):
                 od.final_status = "REJECTED"
 
             od.save()
+
+        # After CC approves, notify the assigned HOD (only if not already rejected)
+        if action == "APPROVED" and od.final_status != "REJECTED":
+            hod_assignment = ApproverAssignment.objects.filter(
+                program=od.student.program,
+                role="HOD"
+            ).filter(
+                Q(year__isnull=True) | Q(year=od.student.year)
+            ).select_related("approver").first()
+
+            print("HOD assignment:", hod_assignment)  # DEBUG
+
+            if hod_assignment and hod_assignment.approver.email:
+                print("Sending email to:", hod_assignment.approver.email)  # DEBUG
+
+                hod_email    = hod_assignment.approver.email
+                hod_name     = safe_name(hod_assignment.approver)
+                student_name = od.student.full_name
+                student_reg  = od.student.register_no
+                student_sec  = od.student.section
+                od_reason    = od.reason
+                od_from      = f"{od.from_date}  {od.from_time}"
+                od_to        = f"{od.to_date}  {od.to_time}"
+
+                def _send_hod_cc():
+                    send_mail(
+                        "URGENT OD Request – HOD Approval Required",
+                        f"""Hello {hod_name},
+
+An OD request has been approved by CC and requires your final approval.
+
+Student     : {student_name}
+Register No : {student_reg}
+Section     : {student_sec}
+Reason      : {od_reason}
+From        : {od_from}
+To          : {od_to}
+
+Please log in and take action.
+
+Regards,
+SIST Management System""",
+                        settings.DEFAULT_FROM_EMAIL,
+                        [hod_email],
+                        fail_silently=True,
+                    )
+                threading.Thread(target=_send_hod_cc, daemon=True).start()
+
+            else:
+                print("HOD NOT FOUND or EMAIL MISSING")  # DEBUG
 
         return JsonResponse({"status": "success"})
 
@@ -206,6 +336,9 @@ def yc_od_action(request):
         with transaction.atomic():
             od = ODRequest.objects.select_for_update().get(id=request_id)
 
+            if od.final_status == "REJECTED":
+                return JsonResponse({"error": "Already rejected"}, status=400)
+
             if od.yc_status != "PENDING":
                 return JsonResponse({"error": "Already processed"}, status=400)
 
@@ -216,6 +349,56 @@ def yc_od_action(request):
                 od.final_status = "REJECTED"
 
             od.save()
+
+        # After YC approves, notify the assigned HOD (only if not already rejected)
+        if action == "APPROVED" and od.final_status != "REJECTED":
+            hod_assignment = ApproverAssignment.objects.filter(
+                program=od.student.program,
+                role="HOD"
+            ).filter(
+                Q(year__isnull=True) | Q(year=od.student.year)
+            ).select_related("approver").first()
+
+            print("HOD assignment:", hod_assignment)  # DEBUG
+
+            if hod_assignment and hod_assignment.approver.email:
+                print("Sending email to:", hod_assignment.approver.email)  # DEBUG
+
+                hod_email    = hod_assignment.approver.email
+                hod_name     = safe_name(hod_assignment.approver)
+                student_name = od.student.full_name
+                student_reg  = od.student.register_no
+                student_sec  = od.student.section
+                od_reason    = od.reason
+                od_from      = f"{od.from_date}  {od.from_time}"
+                od_to        = f"{od.to_date}  {od.to_time}"
+
+                def _send_hod_yc():
+                    send_mail(
+                        "URGENT OD Request – HOD Approval Required",
+                        f"""Hello {hod_name},
+
+An OD request has been approved by YC and requires your final approval.
+
+Student     : {student_name}
+Register No : {student_reg}
+Section     : {student_sec}
+Reason      : {od_reason}
+From        : {od_from}
+To          : {od_to}
+
+Please log in and take action.
+
+Regards,
+SIST Management System""",
+                        settings.DEFAULT_FROM_EMAIL,
+                        [hod_email],
+                        fail_silently=True,
+                    )
+                threading.Thread(target=_send_hod_yc, daemon=True).start()
+
+            else:
+                print("HOD NOT FOUND or EMAIL MISSING")  # DEBUG
 
         return JsonResponse({"status": "success"})
 
@@ -234,9 +417,10 @@ def hod_od_action(request):
         data = json.loads(request.body)
 
         with transaction.atomic():
+            # Plain select_for_update — no select_related to avoid outer-join error on
+            # nullable FKs (cc_action_by, yc_action_by) with PostgreSQL FOR UPDATE
             od = ODRequest.objects.select_for_update().get(id=data["request_id"])
 
-           
             if od.hod_status != "PENDING":
                 return JsonResponse({"error": "Already processed"}, status=400)
 
@@ -248,24 +432,22 @@ def hod_od_action(request):
 
             od.hod_status = data["action"]
             od.hod_action_by_id = data["approver_id"]
-
             od.final_status = "APPROVED" if data["action"] == "APPROVED" else "REJECTED"
 
             od.save()
 
-       
-        send_status_email(
-            od.student,
-            "OD",
-            od.final_status,
-            extra_details=f"""Register No  : {od.student.register_no}
-Program      : {od.student.program} | Year: {od.student.year} | Section: {od.student.section}
-Reason       : {od.reason}
-From         : {od.from_date} {od.from_time}
-To           : {od.to_date} {od.to_time}
+        # Resolve all names in main thread (safe DB access) before spawning thread
+        cc_name      = safe_name(od.cc_action_by)
+        yc_name      = safe_name(od.yc_action_by)
+        hod_name     = safe_name(User.objects.filter(id=data["approver_id"]).first())
+        student      = od.student
+        final_status = od.final_status
 
-Please log in to the SIST Management System to view your OD letter."""
-        )
+        threading.Thread(
+            target=send_od_approval_email,
+            args=(student, od, cc_name, yc_name, hod_name, final_status),
+            daemon=True
+        ).start()
 
         return JsonResponse({"status": "success"})
 
@@ -423,7 +605,11 @@ def hod_lab_action(request):
 
             lab.save()
 
-        send_status_email(lab.student, "Lab", lab.final_status)
+        threading.Thread(
+            target=send_status_email,
+            args=(lab.student, "Lab", lab.final_status),
+            daemon=True
+        ).start()
 
         return JsonResponse({"status": "success"})
 
@@ -541,7 +727,11 @@ def security_hostel_action(request):
 
             hos.save()
 
-        send_status_email(hos.student, "Hostel Outpass", hos.final_status)
+        threading.Thread(
+            target=send_status_email,
+            args=(hos.student, "Hostel Outpass", hos.final_status),
+            daemon=True
+        ).start()
 
         return JsonResponse({"status": "success"})
 

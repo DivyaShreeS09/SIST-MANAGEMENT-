@@ -111,7 +111,7 @@
 
     async function loadAndRender() {
       try {
-        const res = await fetch("/api/od/all/");
+        const res = await fetch("/api/od/all/?approver_id=" + user.id);
         const raw = await res.json();
         odData = raw.map(r => ({ ...r, proofUrl: r.proof_url || "" }));
       } catch (err) {
@@ -133,9 +133,20 @@
       return okP && okS && okY;
     }
 
+    // Sort: pending + expiring soonest first, then pending later, then closed
+    function sortByPriority(list) {
+      return list.slice().sort((a, b) => {
+        const aActive = (a.finalStatus || "PENDING") === "PENDING";
+        const bActive = (b.finalStatus || "PENDING") === "PENDING";
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        if (aActive && bActive) return (a.toDate || "").localeCompare(b.toDate || "");
+        return 0;
+      });
+    }
+
     function render() {
-      let list = odData;
-      list = list.filter(r => matchesFilters(r));
+      let list = sortByPriority(odData.filter(r => matchesFilters(r)));
 
       bodyEl.innerHTML = list.length ? list.map(r => {
         const ccyc = deriveCCYC(r);
@@ -214,10 +225,9 @@
     applyBtn.onclick = render;
 
     exportBtn.onclick = () => {
-      exportApprovedOD(odData, {
-        year: fYear.value.trim(),
-        program: fProgram.value.trim(),
-        section: fSection.value.trim(),
+      // Export only what's currently visible (matches active filters)
+      const scopedData = odData.filter(r => matchesFilters(r));
+      exportApprovedOD(scopedData, {
         fromDate: document.getElementById("fFromDate").value,
         toDate: document.getElementById("fToDate").value,
       });

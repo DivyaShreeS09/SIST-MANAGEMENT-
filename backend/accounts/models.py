@@ -1,4 +1,5 @@
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -46,6 +47,21 @@ class ApproverAssignment(models.Model):
     program = models.CharField(max_length=100)
     year = models.PositiveIntegerField()
     section = models.CharField(max_length=20, blank=True, null=True)
+
+    def clean(self):
+        # Block only exact duplicates (same approver + role + program + year + section).
+        # A user may hold multiple roles and cover multiple sections.
+        qs = ApproverAssignment.objects.filter(
+            approver=self.approver,
+            role=self.role,
+            program=self.program,
+            year=self.year,
+            section=self.section,
+        ).exclude(pk=self.pk)
+        if qs.exists():
+            raise ValidationError(
+                "This exact assignment (approver, role, program, year, section) already exists."
+            )
 
     def __str__(self):
         section_text = self.section if self.section else "ALL"
